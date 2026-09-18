@@ -1,0 +1,17 @@
+{
+  "name": "monopoly-web",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "大富翁 - 网页联机版（单房间 2~6 人）",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "dependencies": {
+    "three": "^0.186.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  }
+}

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>大富翁 - 网页联机版</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- 大厅 -->
+  <div id="lobby" class="screen">
+    <div class="card lobby-card">
+      <h1 class="logo">🎲 大富翁</h1>
+      <p class="subtitle">单房间 · 2~6 人联机</p>
+
+      <div class="join-row">
+        <input id="name-input" type="text" maxlength="12" placeholder="输入昵称">
+        <button id="join-btn" class="btn primary">加入房间</button>
+      </div>
+
+      <div class="players-section">
+        <div class="section-head">
+          <h2>玩家列表</h2>
+          <span id="player-count" class="badge">0/6</span>
+        </div>
+        <ul id="player-list" class="player-list"></ul>
+      </div>
+
+      <button id="start-btn" class="btn start" disabled>开始游戏</button>
+      <p id="lobby-msg" class="msg"></p>
+    </div>
+  </div>
+
+  <!-- 游戏 -->
+  <div id="game" class="screen hidden">
+    <div class="game-wrap">
+      <div id="board"></div>
+      <aside class="side">
+        <!-- 回合状态（最醒目） -->
+        <div class="turn-card">
+          <div id="turn-title" class="turn-title">等待开始</div>
+          <div id="turn-sub" class="turn-sub"></div>
+          <div id="dice-display" class="dice-display"></div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="side-card">
+          <div class="action-btns">
+            <button id="roll-btn" class="btn primary big hidden">🎲 掷骰子</button>
+            <button id="buy-btn" class="btn start big hidden">买下这块地</button>
+            <button id="skip-buy-btn" class="btn ghost hidden">不买，跳过</button>
+            <button id="build-btn" class="btn primary big hidden">🏗️ 盖房</button>
+            <button id="mortgage-btn" class="btn ghost hidden">🏦 抵押 / 赎回</button>
+            <button id="trade-btn" class="btn ghost hidden">🤝 发起交易</button>
+            <button id="end-turn-btn" class="btn primary big hidden">结束回合</button>
+            <div id="build-panel" class="build-panel hidden"></div>
+            <div id="mortgage-panel" class="panel hidden"></div>
+            <div id="trade-panel" class="panel hidden"></div>
+            <div id="trade-offer" class="panel hidden"></div>
+            <div id="waiting-tip" class="waiting-tip hidden">等待其他玩家操作...</div>
+          </div>
+        </div>
+
+        <!-- 玩家列表 -->
+        <div class="side-card">
+          <div class="section-head">
+            <h2>玩家</h2>
+            <span id="game-player-count" class="badge">0/6</span>
+          </div>
+          <ul id="game-player-list" class="player-list"></ul>
+        </div>
+
+        <!-- 日志 -->
+        <div class="side-card log-card">
+          <h2>游戏日志</h2>
+          <ul id="log-list" class="log-list"></ul>
+        </div>
+
+        <button id="lobby-btn" class="btn ghost">回到大厅</button>
+      </aside>
+    </div>
+  </div>
+
+  <script type="module" src="js/client.js"></script>
+</body>
+</html>
+
+
+

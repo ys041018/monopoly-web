@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: monopoly-web
+    env: node
+    plan: free
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: 20.0.0
