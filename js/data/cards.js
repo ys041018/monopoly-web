@@ -25,7 +25,7 @@ export const CHEST_CARDS = [
   { id: 'd5', text: '获得出狱卡', action: 'outOfJail' },
   { id: 'd6', text: '获得奖学金 ¥150', action: 'gain', amount: 150 },
   { id: 'd7', text: '缴纳学费 ¥100', action: 'lose', amount: 100 },
-  { id: 'd8', text: '前进到免费停车', action: 'goto', position: 30 },
+  { id: 'd8', text: '前进到免费停车', action: 'goto', position: 26 },
   { id: 'd9', text: '彩票中奖 ¥200', action: 'gain', amount: 200 },
   { id: 'd10', text: '缴纳水电费 ¥60', action: 'lose', amount: 60 },
 ];

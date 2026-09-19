@@ -6,8 +6,8 @@ import { GROUPS, RAILROAD_PRICE, UTILITY_PRICE } from '../js/data/tiles.js';
 export const START_MONEY = 1500;
 export const PASS_GO_BONUS = 200;
 export const JAIL_BAIL = 50;
-export const JAIL_TILE_ID = 47;        // 监狱（探监/停留）
-export const GOTO_JAIL_TILE_ID = 17;   // 进监狱
+export const JAIL_TILE_ID = 39;        // 监狱（探监/停留）
+export const GOTO_JAIL_TILE_ID = 13;   // 进监狱
 export const MAX_PLAYERS = 8;
 export const MIN_PLAYERS = 2;
 export const DEFAULT_MAX_ROUNDS = 60;

@@ -5,8 +5,7 @@ import { TILES, GROUPS, BOARD_SIZE } from './data/tiles.js';
 
 const CORNER = 92;
 const EDGE = 72;
-const SIZE_W = CORNER * 2 + EDGE * 16;
-const SIZE_H = CORNER * 2 + EDGE * 12;
+const SIZE = CORNER * 2 + EDGE * 12;
 const GAP = 2;
 
 let canvas, ctx, dpr;
@@ -36,14 +35,14 @@ let diceDisplay = null;
 
 function tileRect(id) {
   const c = CORNER, e = EDGE;
-  if (id === 0) return { x: SIZE_W - c, y: SIZE_H - c, w: c, h: c };
-  if (id >= 1 && id <= 16) { const i = id; return { x: SIZE_W - c - i * e, y: SIZE_H - c, w: e, h: c }; }
-  if (id === 17) return { x: 0, y: SIZE_H - c, w: c, h: c };
-  if (id >= 18 && id <= 29) { const i = id - 17; return { x: 0, y: SIZE_H - c - i * e, w: c, h: e }; }
-  if (id === 30) return { x: 0, y: 0, w: c, h: c };
-  if (id >= 31 && id <= 46) { const i = id - 30; return { x: c + (i - 1) * e, y: 0, w: e, h: c }; }
-  if (id === 47) return { x: SIZE_W - c, y: 0, w: c, h: c };
-  if (id >= 48 && id <= 59) { const i = id - 47; return { x: SIZE_W - c, y: c + (i - 1) * e, w: c, h: e }; }
+  if (id === 0) return { x: SIZE - c, y: SIZE - c, w: c, h: c };
+  if (id >= 1 && id <= 12) { const i = id; return { x: SIZE - c - i * e, y: SIZE - c, w: e, h: c }; }
+  if (id === 13) return { x: 0, y: SIZE - c, w: c, h: c };
+  if (id >= 14 && id <= 25) { const i = id - 13; return { x: 0, y: SIZE - c - i * e, w: c, h: e }; }
+  if (id === 26) return { x: 0, y: 0, w: c, h: c };
+  if (id >= 27 && id <= 38) { const i = id - 26; return { x: c + (i - 1) * e, y: 0, w: e, h: c }; }
+  if (id === 39) return { x: SIZE - c, y: 0, w: c, h: c };
+  if (id >= 40 && id <= 51) { const i = id - 39; return { x: SIZE - c, y: c + (i - 1) * e, w: c, h: e }; }
   return { x: 0, y: 0, w: 0, h: 0 };
 }
 
@@ -57,17 +56,17 @@ export function render(state) {
   }
   ctx = ctx || canvas.getContext('2d');
   dpr = dpr || (window.devicePixelRatio || 1);
-  const cssW = holder.clientWidth || SIZE_W;
-  const scale = cssW / SIZE_W;
+  const cssW = holder.clientWidth || SIZE;
+  const scale = cssW / SIZE;
   if (canvas.width !== Math.round(cssW * dpr)) {
     canvas.width = Math.round(cssW * dpr);
-    canvas.height = Math.round(cssW * SIZE_H / SIZE_W * dpr);
+    canvas.height = Math.round(cssW * SIZE / SIZE * dpr);
     canvas.style.width = '100%';
     canvas.style.height = '100%';
     ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
   }
 
-  ctx.clearRect(0, 0, SIZE_W, SIZE_H);
+  ctx.clearRect(0, 0, SIZE, SIZE);
   for (let i = 0; i < BOARD_SIZE; i++) drawTile(i, TILES[i], state);
   drawCenter(state);
   if (state) { updateTokens(state.players); drawTokens(); }
@@ -98,8 +97,8 @@ function drawProperty(id, tile, r, vertical, corner, state) {
   const ownerId = state ? state.tileOwners[id] : null;
   const owner = ownerId ? state.players.find(p => p.id === ownerId) : null;
 
-  // 底色：有主用所有者浅色（整块地产呈现所有者色调），无主白色
-  ctx.fillStyle = owner ? mixWhite(owner.color, 0.78) : '#fdfefe';
+  // 底色：统一白色（简洁）
+  ctx.fillStyle = '#fdfefe';
   roundRect(x, y, w, h, 6);
   ctx.fill();
 
@@ -114,15 +113,7 @@ function drawProperty(id, tile, r, vertical, corner, state) {
   if (vertical) ctx.fillRect(band.x, band.y + band.h - 4, band.w, 4);
   else ctx.fillRect(band.x + band.w - 4, band.y, 4, band.h);
 
-  if (owner) {
-    // 有主地：色条上直接显示所有者名字（醒目，不靠颜色）
-    if (vertical) {
-      const fs = Math.max(10, Math.min(14, (band.w - 8) / Math.max(owner.name.length, 1)));
-      drawText(owner.name, band.x + band.w / 2, band.y + band.h / 2, fs, '#ffffff', 'center', 'bold');
-    } else {
-      drawVerticalText(owner.name, band.x + band.w / 2, band.y + band.h * 0.3, band.y + band.h * 0.7, 13, '#ffffff');
-    }
-  } else {
+  if (!owner) {
     drawIcon('🏠', band.x + band.w / 2, band.y + band.h / 2, corner ? 26 : 16);
   }
 
@@ -145,24 +136,22 @@ function drawProperty(id, tile, r, vertical, corner, state) {
   ctx.fill();
   drawText(price, bx + badgeW / 2, by + badgeH / 2 + 0.5, 12.5, '#fff', 'center', 'bold');
 
-  // 归属：所有者颜色粗边框 + 房子
+  // 建筑：绿色房子 / 红色旅馆（固定色，不与玩家色混淆）
   if (owner) {
-    ctx.strokeStyle = owner.color;
-    ctx.lineWidth = 4;
-    roundRect(x + 2, y + 2, w - 4, h - 4, 6);
-    ctx.stroke();
     const houses = state.tileHouses[id] || 0;
     for (let hh = 0; hh < houses; hh++) {
       const isHotel = hh === 4;
       const hs = 8;
       const hx = r.x + r.w / 2 + (hh - (houses - 1) / 2) * (hs + 2);
       const hy = vertical ? r.y + r.h * 0.52 : r.y + r.h * 0.54;
-      ctx.fillStyle = isHotel ? '#ef5350' : owner.color;
+      ctx.fillStyle = isHotel ? '#e53935' : '#3f8f4f';
       ctx.fillRect(hx - hs / 2, hy - hs / 2, hs, hs);
       ctx.strokeStyle = 'rgba(0,0,0,0.25)';
       ctx.lineWidth = 1;
       ctx.strokeRect(hx - hs / 2, hy - hs / 2, hs, hs);
     }
+    // 归属徽章：玩家色圆形 + 名字首字，放在卡片右上角
+    drawOwnerBadge(owner, x + w - 12, y + 12, 22, state.players.indexOf(owner) + 1);
   }
 }
 
@@ -198,20 +187,16 @@ function drawSpecial(id, tile, r, vertical, corner, state) {
     drawText(tile.name, r.x + r.w * 0.58, r.y + r.h / 2, 13, '#fff', 'center', 'bold');
   }
 
-  // 车站/公共事业归属边框
+  // 车站/公共事业归属：与地产一致的玩家徽章
   const ownerId = state ? state.tileOwners[id] : null;
   if (ownerId && (tile.type === 'railroad' || tile.type === 'utility')) {
     const owner = state.players.find(p => p.id === ownerId);
-    const color = owner ? owner.color : '#fff';
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 3;
-    roundRect(x + 1.5, y + 1.5, w - 3, h - 3, 6);
-    ctx.stroke();
+    if (owner) drawOwnerBadge(owner, x + w - 12, y + 12, 22, state.players.indexOf(owner) + 1);
   }
 }
 
 function drawCenter(state) {
-  const x = CORNER, y = CORNER, w = SIZE_W - CORNER * 2, h = SIZE_H - CORNER * 2;
+  const x = CORNER, y = CORNER, w = SIZE - CORNER * 2, h = SIZE - CORNER * 2;
   const bg = ctx.createLinearGradient(x, y, x + w, y + h);
   bg.addColorStop(0, '#172231');
   bg.addColorStop(1, '#0f1924');
@@ -221,7 +206,7 @@ function drawCenter(state) {
   ctx.strokeStyle = 'rgba(255,255,255,0.06)';
   ctx.strokeRect(x + 10, y + 10, w - 20, h - 20);
 
-  const cx = SIZE_W / 2;
+  const cx = SIZE / 2;
 
   // 标题
   const gold = ctx.createLinearGradient(cx - 100, 0, cx + 100, 0);
@@ -301,7 +286,7 @@ function drawLeaderboard(state, topY) {
   });
   assets.sort((a, b) => b.value - a.value);
 
-  const x0 = CORNER + 40, w = SIZE_W - CORNER * 2 - 80;
+  const x0 = CORNER + 40, w = SIZE - CORNER * 2 - 80;
   const y0 = topY + 270;
   const rowH = 30;
   ctx.textBaseline = 'middle';
@@ -382,7 +367,7 @@ function bindTileClick() {
   canvas.addEventListener('click', (e) => {
     const rect = canvas.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
-    const scale = SIZE_W / rect.width;
+    const scale = SIZE / rect.width;
     const x = (e.clientX - rect.left) * scale;
     const y = (e.clientY - rect.top) * scale;
     for (let i = 0; i < BOARD_SIZE; i++) {
@@ -484,6 +469,19 @@ function drawVerticalText(text, cx, topY, bottomY, size, color) {
   ctx.font = '800 ' + s + 'px system-ui, "Microsoft YaHei", sans-serif';
   ctx.fillStyle = color;
   chars.forEach(ch => { ctx.fillText(ch, cx, y); y += step; });
+}
+
+function drawOwnerBadge(owner, cx, cy, size, label) {
+  const r = size / 2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = owner.color;
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#ffffff';
+  ctx.stroke();
+  const text = String(label ?? [...String(owner.name)][0] ?? '?');
+  drawText(text, cx, cy + 0.5, Math.round(r * 1.15), '#ffffff', 'center', 'bold');
 }
 
 function mixWhite(hex, ratio) {

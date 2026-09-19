@@ -172,6 +172,17 @@ function updateActions() {
   }
 }
 
+function updateAuctionTimer() {
+  const el = document.getElementById('auction-timer');
+  if (!el || !state || !state.auction) return;
+  const remain = Math.max(0, Math.ceil((state.auction.deadline - Date.now()) / 1000));
+  el.textContent = '⏳ 倒计时：' + remain + ' 秒';
+}
+
+setInterval(() => {
+  if (state && state.phase === 'auction' && !auctionPanel.classList.contains('hidden')) updateAuctionTimer();
+}, 500);
+
 function tilePrice(t) {
   if (t.type === 'railroad') return 200;
   if (t.type === 'utility') return 150;
@@ -199,6 +210,23 @@ function getBuildableTiles() {
     });
   });
   return result;
+}
+
+function canBuildOn(tileId) {
+  if (!state) return false;
+  const tile = TILES[tileId];
+  if (!tile || tile.type !== 'property') return false;
+  if (state.tileOwners[tileId] !== myId) return false;
+  if (state.tileMortgaged[tileId]) return false;
+  const h = state.tileHouses[tileId] || 0;
+  if (h >= 5) return false;
+  const groupTiles = TILES.filter(t => t.type === 'property' && t.group === tile.group);
+  if (!groupTiles.every(t => state.tileOwners[t.id] === myId)) return false;
+  const minH = Math.min(...groupTiles.map(t => state.tileHouses[t.id] || 0));
+  if (h > minH) return false;
+  const myTurn = !isSpectator && state.players[state.current].id === myId;
+  if (!myTurn) return false;
+  return state.phase === 'rolling' || state.phase === 'after_move';
 }
 
 function renderBuildPanel() {
@@ -325,6 +353,13 @@ function renderAuctionPanel() {
   info.className = 'offer-box';
   info.textContent = '当前价 ¥' + a.currentBid + (bidder ? '（' + bidder.name + ' 出价）' : '（无人出价）');
   auctionPanel.appendChild(info);
+  // 倒计时
+  const timer = document.createElement('div');
+  timer.className = 'auction-timer';
+  timer.id = 'auction-timer';
+  auctionPanel.appendChild(timer);
+  updateAuctionTimer();
+
   if (!isSpectator) {
     const row = document.createElement('div');
     row.className = 'trade-row';
@@ -488,6 +523,9 @@ function renderDeed(tileId) {
     html += '<div class="deed-note">集齐同色整组（垄断）后，空地过路费 ×2</div>';
     html += '<div class="deed-row"><span class="k">抵押价</span><span class="v">¥' + Math.floor(tile.price / 2) + '</span></div>';
     html += '<div class="deed-row"><span class="k">赎回价</span><span class="v">¥' + Math.floor(Math.floor(tile.price / 2) * 1.1) + '</span></div>';
+    if (canBuildOn(tileId)) {
+      html += '<button id="deed-build-btn" class="btn start big" style="width:100%;margin-top:10px">🏗️ 盖房 ¥' + g.houseCost + '</button>';
+    }
   } else if (tile.type === 'railroad') {
     html += '<div class="deed-band" style="background:#78909C"></div>';
     html += '<div class="deed-title">' + tile.name + '（车站）</div>';
@@ -524,6 +562,13 @@ function renderDeed(tileId) {
   }
 
   deedContent.innerHTML = html;
+  const buildBtnEl = deedContent.querySelector('#deed-build-btn');
+  if (buildBtnEl) {
+    buildBtnEl.addEventListener('click', () => {
+      ws.send(JSON.stringify({ type: 'build_house', tileId }));
+      deedModal.classList.add('hidden');
+    });
+  }
   deedModal.classList.remove('hidden');
 }
 
