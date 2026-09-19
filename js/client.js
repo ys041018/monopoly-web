@@ -121,6 +121,7 @@ ws.onmessage = (e) => {
 function enterGame() {
   lobby.classList.add('hidden');
   game.classList.remove('hidden');
+  tradePanel.classList.add('hidden');
   prevLogLength = state.log ? state.log.length : 0;
   render(state);
   refresh();
@@ -165,7 +166,7 @@ function backToLobby() {
 // ---------- 操作按钮 ----------
 function hideAllActions() {
   [rollBtn, buyBtn, skipBuyBtn, endTurnBtn, buildBtn, mortgageBtn, tradeBtn].forEach(b => b.classList.add('hidden'));
-  [buildPanel, mortgagePanel, tradePanel, auctionPanel].forEach(p => p.classList.add('hidden'));
+  [buildPanel, mortgagePanel, auctionPanel].forEach(p => p.classList.add('hidden'));
   waitingTip.classList.add('hidden');
 }
 
