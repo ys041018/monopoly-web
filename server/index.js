@@ -59,7 +59,7 @@ wss.on('connection', (ws) => {
 
     if (msg.type === 'join') {
       if (playerId) return;
-      const result = room.addPlayer(ws, msg.name);
+      const result = room.addPlayer(ws, msg.name, msg.playerId);
       console.log('[加入] ' + (msg.name || '(空)') + ' -> ' +
         (result.error ? ('拒绝: ' + result.error) : (result.spectator ? '旁观' : '成功 id=' + result.id)));
       if (result.error) { room.sendError(ws, result.error); ws.close(); return; }
@@ -72,6 +72,8 @@ wss.on('connection', (ws) => {
         return;
       }
       ws.send(JSON.stringify({ type: 'welcome', playerId: result.id, player: result.player }));
+      // 重连的玩家：补发当前游戏状态，让前端直接进入对局
+      if (room.state) ws.send(JSON.stringify({ type: 'game_state', state: room.state }));
       return;
     }
 

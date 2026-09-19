@@ -23,7 +23,15 @@ export class GameRoom {
     this._auctionTimer = null;
   }
 
-  addPlayer(ws, name) {
+  addPlayer(ws, name, playerId) {
+    // 重连：大厅或游戏中，只要 playerId 匹配现有玩家，恢复其连接
+    if (playerId && this.players.has(playerId)) {
+      const p = this.players.get(playerId);
+      if (p._discTimer) { clearTimeout(p._discTimer); p._discTimer = null; }
+      p.ws = ws;
+      this.broadcastPlayerList();
+      return { id: playerId, player: { id: p.id, name: p.name, color: p.color, isHost: p.isHost } };
+    }
     if (this.started) {
       const id = uid();
       this.spectators.set(id, ws);
@@ -43,6 +51,16 @@ export class GameRoom {
   }
 
   removePlayer(playerId) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    player.ws = null;
+    if (!this.started || !this.state) { this._deletePlayer(playerId); return; }
+    if (player._discTimer) clearTimeout(player._discTimer);
+    player._discTimer = setTimeout(() => { player._discTimer = null; this._deletePlayer(playerId); }, 60000);
+    this.broadcastPlayerList();
+  }
+
+  _deletePlayer(playerId) {
     const player = this.players.get(playerId);
     if (!player) return;
     this.players.delete(playerId);
@@ -618,6 +636,7 @@ export class GameRoom {
 
   resetToLobby() {
     if (this._auctionTimer) { clearTimeout(this._auctionTimer); this._auctionTimer = null; }
+    this.players.forEach((p) => { if (p._discTimer) { clearTimeout(p._discTimer); p._discTimer = null; } });
     this.started = false;
     this.state = null;
     this.spectators.forEach((ws) => { try { ws.close(); } catch {} });
@@ -647,8 +666,8 @@ export class GameRoom {
   }
 
   broadcast(msg) {
-    this.players.forEach(p => { if (p.ws.readyState === 1) p.ws.send(msg); });
-    this.spectators.forEach(s => { if (s.readyState === 1) s.send(msg); });
+    this.players.forEach(p => { if (p.ws && p.ws.readyState === 1) p.ws.send(msg); });
+    this.spectators.forEach(s => { if (s && s.readyState === 1) s.send(msg); });
   }
 
   sendError(ws, message) {

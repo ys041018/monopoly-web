@@ -35,12 +35,28 @@ let prevLogLength = 0;
 let prevLastCard = null;
 let cardTimer = null;
 
+// ---------- 自动重连 ----------
+(function autoRejoin() {
+  const savedId = sessionStorage.getItem('monopoly_player_id');
+  const savedName = sessionStorage.getItem('monopoly_player_name');
+  if (!savedId || !savedName) return;
+  nameInput.value = savedName;
+  const send = () => {
+    gotError = false;
+    ws.send(JSON.stringify({ type: 'join', name: savedName, playerId: savedId }));
+    joinBtn.disabled = true;
+    setMsg('正在重连...');
+  };
+  if (ws.readyState === 1) send();
+  else ws.addEventListener('open', send);
+})();
+
 // ---------- 发送 ----------
 joinBtn.addEventListener('click', () => {
   const name = nameInput.value.trim();
   if (!name) { setMsg('请输入昵称', true); return; }
   gotError = false;
-  ws.send(JSON.stringify({ type: 'join', name }));
+  ws.send(JSON.stringify({ type: 'join', name, playerId: sessionStorage.getItem('monopoly_player_id') || undefined }));
   joinBtn.disabled = true;
   setMsg('正在加入...');
 });
@@ -73,6 +89,13 @@ ws.onmessage = (e) => {
       myId = msg.playerId;
       isSpectator = !!msg.spectator;
       myIsHost = msg.player ? msg.player.isHost : false;
+      if (!isSpectator && msg.player) {
+        sessionStorage.setItem('monopoly_player_id', msg.player.id);
+        sessionStorage.setItem('monopoly_player_name', msg.player.name);
+      } else if (isSpectator) {
+        sessionStorage.removeItem('monopoly_player_id');
+        sessionStorage.removeItem('monopoly_player_name');
+      }
       break;
     case 'player_list':
       players = msg.players;
