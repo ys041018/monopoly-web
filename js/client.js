@@ -118,6 +118,7 @@ function syncGame() {
 }
 
 function refresh() {
+  render(state);
   renderPlayers();
   renderLog();
   renderDice();
