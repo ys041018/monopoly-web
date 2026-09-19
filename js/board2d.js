@@ -334,18 +334,28 @@ function drawTokens() {
     const px = animating && animating.id === p.id ? t.x : cx;
     const py = animating && animating.id === p.id ? t.y : cy;
     if (!animating || animating.id !== p.id) { t.x = cx; t.y = cy; }
-    drawToken(px, py, 11, t.color);
+    const idx = stateRef.players.indexOf(p);
+    drawToken(px, py, 14, t.color, idx + 1, stateRef.current === idx);
   });
 }
 
 let stateRef = null;
 let animating = null;
 
-function drawToken(px, py, radius, color) {
+function drawToken(px, py, radius, color, label, highlight) {
   ctx.beginPath();
-  ctx.ellipse(px, py + radius * 0.7, radius * 0.8, radius * 0.35, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.ellipse(px, py + radius * 0.7, radius * 0.85, radius * 0.38, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.32)';
   ctx.fill();
+  if (highlight) {
+    ctx.beginPath();
+    ctx.arc(px, py, radius + 4, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 215, 116, 0.30)';
+    ctx.fill();
+    ctx.strokeStyle = '#f7d774';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
   const g = ctx.createRadialGradient(px - radius * 0.35, py - radius * 0.4, radius * 0.15, px, py, radius);
   g.addColorStop(0, lighten(color, 40));
   g.addColorStop(0.55, color);
@@ -354,9 +364,12 @@ function drawToken(px, py, radius, color) {
   ctx.arc(px, py, radius, 0, Math.PI * 2);
   ctx.fillStyle = g;
   ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2.5;
   ctx.stroke();
+  if (label != null) {
+    drawText(String(label), px, py + 0.5, Math.round(radius * 0.95), '#ffffff', 'center', 'bold');
+  }
 }
 
 // 点击检测：把 canvas 点击坐标换算成逻辑坐标，找到对应格子
