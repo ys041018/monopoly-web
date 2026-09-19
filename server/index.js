@@ -95,6 +95,11 @@ wss.on('connection', (ws) => {
         if (r.error) room.sendError(ws, r.error);
         break;
       }
+      case 'bid': {
+        const r = room.bid(playerId, msg.amount);
+        if (r.error) room.sendError(ws, r.error);
+        break;
+      }
       case 'skip_buy': {
         const r = room.skipBuy(playerId);
         if (r.error) room.sendError(ws, r.error);
@@ -180,6 +185,7 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   if (!found) console.log('    http://localhost:' + PORT);
   console.log('========================================');
 });
+
 
 
 

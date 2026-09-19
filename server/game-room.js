@@ -10,7 +10,7 @@ import {
 import { TILES, BOARD_SIZE } from '../js/data/tiles.js';
 import { CHANCE_CARDS, CHEST_CARDS } from '../js/data/cards.js';
 
-const PLAYER_COLORS = ['#EF5350', '#FF9800', '#FDD835', '#66BB6A', '#4FC3F7', '#AB47BC'];
+const PLAYER_COLORS = ['#EF5350', '#FF9800', '#FDD835', '#66BB6A', '#4FC3F7', '#AB47BC', '#26C6DA', '#EC407A'];
 
 function uid() { return Math.random().toString(36).slice(2, 10); }
 
@@ -20,6 +20,7 @@ export class GameRoom {
     this.spectators = new Map();
     this.started = false;
     this.state = null;
+    this._auctionTimer = null;
   }
 
   addPlayer(ws, name) {
@@ -28,7 +29,7 @@ export class GameRoom {
       this.spectators.set(id, ws);
       return { id, spectator: true };
     }
-    if (this.players.size >= MAX_PLAYERS) return { error: '房间已满（最多6人）' };
+    if (this.players.size >= MAX_PLAYERS) return { error: '房间已满（最多8人）' };
 
     const cleanName = String(name || '').trim() || ('玩家' + (this.players.size + 1));
     const used = new Set([...this.players.values()].map(p => p.color));
@@ -85,6 +86,8 @@ export class GameRoom {
       tileHouses: {},   // tileId -> level
       tileMortgaged: {}, // tileId -> true
       pendingTrade: null,
+      auction: null,
+      lastCard: null,
       pendingTile: null,
       lastMove: null,
       log: ['游戏开始！'],
@@ -160,6 +163,7 @@ export class GameRoom {
       const card = deck[Math.floor(Math.random() * deck.length)];
       logMsg += '，抽到【' + card.text + '】';
       this.applyCard(cur, ps, card);
+      this.state.lastCard = { type: tile.type, text: card.text };
     } else if (tile.type === 'event') {
       const r = this.applyEvent(cur, ps, tile);
       logMsg += '，' + r.text;
@@ -203,16 +207,66 @@ export class GameRoom {
     return { ok: true };
   }
 
-  // 放弃购买
+  // 放弃购买 -> 进入公开拍卖
   skipBuy(playerId) {
     if (!this.state) return { error: '游戏未开始' };
     const cur = this.state.players[this.state.current];
     if (cur.id !== playerId) return { error: '还没轮到你' };
-    if (this.state.phase !== 'buying') return { error: '当前不能跳过' };
-    this.addLog(cur.name + ' 放弃购买');
+    if (this.state.phase !== 'buying' || this.state.pendingTile == null) return { error: '当前不能跳过' };
+    const tileId = this.state.pendingTile;
+    const tile = TILES[tileId];
+    this.addLog(cur.name + ' 放弃购买，「' + tile.name + '」进入公开拍卖！');
+    this.state.phase = 'auction';
+    this.state.pendingTile = null;
+    this.state.auction = { tileId, currentBid: 0, currentBidder: null };
+    this.broadcastState();
+    this.scheduleAuctionEnd();
+    return { ok: true };
+  }
+
+  // 拍卖出价
+  bid(playerId, amount) {
+    if (!this.state || !this.state.auction) return { error: '没有进行中的拍卖' };
+    if (this.state.phase !== 'auction') return { error: '不在拍卖中' };
+    const bidAmount = Math.floor(Number(amount));
+    if (!(bidAmount > this.state.auction.currentBid)) return { error: '出价需高于当前价' };
+    const player = this.state.players.find(p => p.id === playerId);
+    if (!player || player.bankrupt) return { error: '无法出价' };
+    if (player.money < bidAmount) return { error: '现金不足' };
+    this.state.auction.currentBid = bidAmount;
+    this.state.auction.currentBidder = playerId;
+    this.addLog(player.name + ' 出价 ¥' + bidAmount);
+    this.broadcastState();
+    this.scheduleAuctionEnd();
+    return { ok: true };
+  }
+
+  scheduleAuctionEnd() {
+    if (this._auctionTimer) clearTimeout(this._auctionTimer);
+    this._auctionTimer = setTimeout(() => {
+      this._auctionTimer = null;
+      if (this.state && this.state.phase === 'auction') this.endAuction();
+    }, 15000);
+  }
+
+  endAuction() {
+    if (!this.state || !this.state.auction) return;
+    const auction = this.state.auction;
+    const tile = TILES[auction.tileId];
+    if (auction.currentBidder) {
+      const winner = this.state.players.find(p => p.id === auction.currentBidder);
+      if (winner) {
+        winner.money -= auction.currentBid;
+        this.state.tileOwners[auction.tileId] = winner.id;
+        this.state.tileHouses[auction.tileId] = 0;
+        this.addLog(winner.name + ' 以 ¥' + auction.currentBid + ' 拍得「' + tile.name + '」');
+      }
+    } else {
+      this.addLog('「' + tile.name + '」无人出价，流拍');
+    }
+    this.state.auction = null;
     this.finishTurn();
     this.broadcastState();
-    return { ok: true };
   }
 
   // 结束回合（收租/缴税/事件后）
@@ -473,7 +527,10 @@ export class GameRoom {
     }
     if (giveMoney < 0 || getMoney < 0) return { error: '金额不能为负' };
     this.state.pendingTrade = { from: playerId, to: proposal.to, giveTiles, getTiles, giveMoney, getMoney };
-    this.addLog(cur.name + ' 向 ' + to.name + ' 发起交易提议');
+    // 交易内容写入日志，所有玩家可见
+    const giveDesc = [...giveTiles.map((id) => TILES[id].name), ...(giveMoney ? ['¥' + giveMoney] : [])].join('、') || '无';
+    const getDesc = [...getTiles.map((id) => TILES[id].name), ...(getMoney ? ['¥' + getMoney] : [])].join('、') || '无';
+    this.addLog(from.name + ' 提议与 ' + to.name + ' 交易：给[' + giveDesc + '] 换 [' + getDesc + ']');
     this.broadcastState();
     return { ok: true };
   }
@@ -558,6 +615,7 @@ export class GameRoom {
   }
 
   resetToLobby() {
+    if (this._auctionTimer) { clearTimeout(this._auctionTimer); this._auctionTimer = null; }
     this.started = false;
     this.state = null;
     this.spectators.forEach((ws) => { try { ws.close(); } catch {} });

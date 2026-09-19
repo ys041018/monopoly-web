@@ -24,8 +24,22 @@ body {
   background-attachment: fixed;
 }
 
-.screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
+.screen { display: flex; align-items: center; justify-content: center; height: 100vh; padding: 8px; overflow: hidden; }
 .hidden { display: none !important; }
+.card-popup { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 90; pointer-events: none; }
+.card-popup-inner { background: linear-gradient(145deg, #26364d, #1a2738); border: 2px solid rgba(255,255,255,0.18); border-radius: 18px; padding: 28px 40px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.6); animation: cardIn 0.28s ease; max-width: 360px; }
+.card-popup-title { font-size: 22px; font-weight: 800; margin-bottom: 10px; }
+.card-popup-text { font-size: 18px; line-height: 1.5; color: #eaf0f7; }
+@keyframes cardIn { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.62); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+.modal-card { background: #162438; border: 1px solid rgba(255,255,255,0.12); border-radius: 18px; padding: 22px 24px; max-width: 380px; width: 100%; box-shadow: 0 24px 60px rgba(0,0,0,0.6); max-height: 90vh; overflow-y: auto; }
+.deed-title { font-size: 20px; font-weight: 800; margin-bottom: 2px; }
+.deed-band { height: 8px; border-radius: 4px; margin-bottom: 12px; }
+.deed-row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 14px; }
+.deed-row .k { color: var(--muted); }
+.deed-row .v { font-weight: 700; font-variant-numeric: tabular-nums; }
+.deed-note { margin-top: 12px; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.deed-owner { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; margin-bottom: 10px; }
 
 /* ---------- 大厅 ---------- */
 .card {
@@ -115,14 +129,14 @@ h2 { font-size: 15px; color: var(--text); }
 
 /* ---------- 游戏 ---------- */
 .game-wrap {
-  display: flex; gap: 14px; align-items: stretch;
+  display: flex; gap: 12px; align-items: stretch; height: 100%; max-height: calc(100vh - 16px); overflow: hidden;
   background: var(--card); border: 1px solid var(--card-border);
   border-radius: 22px; box-shadow: var(--shadow);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   padding: 12px;
 }
-#board { border-radius: 16px; width: min(98vh, calc(100vw - 360px)); aspect-ratio: 1; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,.5); background: #0f1924; position: relative; flex: none; }
-.side { display: flex; flex-direction: column; gap: 12px; width: 280px; }
+#board { border-radius: 16px; width: min(calc(100vw - 320px), calc((100vh - 32px) * 1.275)); aspect-ratio: 1336 / 1048; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,.5); background: #0f1924; position: relative; flex: none; }
+.side { display: flex; flex-direction: column; gap: 10px; width: 260px; min-height: 0; overflow: hidden; }
 
 /* 回合状态卡 */
 .turn-card {
@@ -139,7 +153,7 @@ h2 { font-size: 15px; color: var(--text); }
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 14px; padding: 14px 16px;
 }
-.log-card { flex: 1; display: flex; flex-direction: column; min-height: 120px; }
+.log-card { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .action-btns { display: flex; flex-direction: column; gap: 9px; }
 .build-panel { display: flex; flex-direction: column; gap: 7px; margin-top: 9px; max-height: 220px; overflow-y: auto; }
 .build-row { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 8px 10px; }
@@ -159,6 +173,9 @@ h2 { font-size: 15px; color: var(--text); }
 .log-list { list-style: none; margin-top: 8px; flex: 1; overflow-y: auto; font-size: 14px; display: flex; flex-direction: column; gap: 7px; }
 .log-list li { color: #b8c5d6; line-height: 1.45; }
 .log-list li::before { content: "· "; color: var(--gold-1); font-weight: 700; }
+
+
+
 
 
 

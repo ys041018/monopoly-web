@@ -3,9 +3,10 @@
 // ============================================================
 import { TILES, GROUPS, BOARD_SIZE } from './data/tiles.js';
 
-const SIZE = 900;
-const CORNER = 117;
-const EDGE = (SIZE - CORNER * 2) / 12;
+const CORNER = 92;
+const EDGE = 72;
+const SIZE_W = CORNER * 2 + EDGE * 16;
+const SIZE_H = CORNER * 2 + EDGE * 12;
 const GAP = 2;
 
 let canvas, ctx, dpr;
@@ -31,17 +32,18 @@ const ICON = {
 
 // 棋子：playerId -> { color, x, y }
 let tokens = new Map();
+let diceDisplay = null;
 
 function tileRect(id) {
   const c = CORNER, e = EDGE;
-  if (id === 0) return { x: SIZE - c, y: SIZE - c, w: c, h: c };
-  if (id >= 1 && id <= 12) { const i = id; return { x: SIZE - c - i * e, y: SIZE - c, w: e, h: c }; }
-  if (id === 13) return { x: 0, y: SIZE - c, w: c, h: c };
-  if (id >= 14 && id <= 25) { const i = id - 13; return { x: 0, y: SIZE - c - i * e, w: c, h: e }; }
-  if (id === 26) return { x: 0, y: 0, w: c, h: c };
-  if (id >= 27 && id <= 38) { const i = id - 26; return { x: c + (i - 1) * e, y: 0, w: e, h: c }; }
-  if (id === 39) return { x: SIZE - c, y: 0, w: c, h: c };
-  if (id >= 40 && id <= 51) { const i = id - 39; return { x: SIZE - c, y: c + (i - 1) * e, w: c, h: e }; }
+  if (id === 0) return { x: SIZE_W - c, y: SIZE_H - c, w: c, h: c };
+  if (id >= 1 && id <= 16) { const i = id; return { x: SIZE_W - c - i * e, y: SIZE_H - c, w: e, h: c }; }
+  if (id === 17) return { x: 0, y: SIZE_H - c, w: c, h: c };
+  if (id >= 18 && id <= 29) { const i = id - 17; return { x: 0, y: SIZE_H - c - i * e, w: c, h: e }; }
+  if (id === 30) return { x: 0, y: 0, w: c, h: c };
+  if (id >= 31 && id <= 46) { const i = id - 30; return { x: c + (i - 1) * e, y: 0, w: e, h: c }; }
+  if (id === 47) return { x: SIZE_W - c, y: 0, w: c, h: c };
+  if (id >= 48 && id <= 59) { const i = id - 47; return { x: SIZE_W - c, y: c + (i - 1) * e, w: c, h: e }; }
   return { x: 0, y: 0, w: 0, h: 0 };
 }
 
@@ -51,19 +53,21 @@ export function render(state) {
   if (!canvas) {
     canvas = document.createElement('canvas');
     holder.appendChild(canvas);
+    bindTileClick();
   }
   ctx = ctx || canvas.getContext('2d');
   dpr = dpr || (window.devicePixelRatio || 1);
-  const cssW = holder.clientWidth || SIZE;
+  const cssW = holder.clientWidth || SIZE_W;
+  const scale = cssW / SIZE_W;
   if (canvas.width !== Math.round(cssW * dpr)) {
     canvas.width = Math.round(cssW * dpr);
-    canvas.height = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssW * SIZE_H / SIZE_W * dpr);
     canvas.style.width = '100%';
     canvas.style.height = '100%';
-    ctx.setTransform(dpr * cssW / SIZE, 0, 0, dpr * cssW / SIZE, 0, 0);
+    ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
   }
 
-  ctx.clearRect(0, 0, SIZE, SIZE);
+  ctx.clearRect(0, 0, SIZE_W, SIZE_H);
   for (let i = 0; i < BOARD_SIZE; i++) drawTile(i, TILES[i], state);
   drawCenter(state);
   if (state) { updateTokens(state.players); drawTokens(); }
@@ -110,7 +114,17 @@ function drawProperty(id, tile, r, vertical, corner, state) {
   if (vertical) ctx.fillRect(band.x, band.y + band.h - 4, band.w, 4);
   else ctx.fillRect(band.x + band.w - 4, band.y, 4, band.h);
 
-  drawIcon('🏠', band.x + band.w / 2, band.y + band.h / 2, corner ? 26 : 16);
+  if (owner) {
+    // 有主地：色条上直接显示所有者名字（醒目，不靠颜色）
+    if (vertical) {
+      const fs = Math.max(10, Math.min(14, (band.w - 8) / Math.max(owner.name.length, 1)));
+      drawText(owner.name, band.x + band.w / 2, band.y + band.h / 2, fs, '#ffffff', 'center', 'bold');
+    } else {
+      drawVerticalText(owner.name, band.x + band.w / 2, band.y + band.h * 0.3, band.y + band.h * 0.7, 13, '#ffffff');
+    }
+  } else {
+    drawIcon('🏠', band.x + band.w / 2, band.y + band.h / 2, corner ? 26 : 16);
+  }
 
   // 名字
   if (corner) {
@@ -197,46 +211,115 @@ function drawSpecial(id, tile, r, vertical, corner, state) {
 }
 
 function drawCenter(state) {
-  const x = CORNER, y = CORNER, w = SIZE - CORNER * 2;
-  const bg = ctx.createLinearGradient(x, y, x + w, y + w);
+  const x = CORNER, y = CORNER, w = SIZE_W - CORNER * 2, h = SIZE_H - CORNER * 2;
+  const bg = ctx.createLinearGradient(x, y, x + w, y + h);
   bg.addColorStop(0, '#172231');
   bg.addColorStop(1, '#0f1924');
   ctx.fillStyle = bg;
-  roundRect(x, y, w, w, 18);
+  roundRect(x, y, w, h, 18);
   ctx.fill();
   ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-  ctx.strokeRect(x + 10, y + 10, w - 20, w - 20);
+  ctx.strokeRect(x + 10, y + 10, w - 20, h - 20);
 
-  const gold = ctx.createLinearGradient(SIZE / 2 - 110, 0, SIZE / 2 + 110, 0);
+  const cx = SIZE_W / 2;
+
+  // 标题
+  const gold = ctx.createLinearGradient(cx - 100, 0, cx + 100, 0);
   gold.addColorStop(0, '#f7d774'); gold.addColorStop(0.5, '#fff3c4'); gold.addColorStop(1, '#e8b84a');
   ctx.fillStyle = gold;
-  ctx.font = '800 54px system-ui, "Microsoft YaHei", sans-serif';
+  ctx.font = '800 44px system-ui, "Microsoft YaHei", sans-serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('大富翁', SIZE / 2, SIZE / 2 - 76);
-  ctx.fillStyle = 'rgba(255,255,255,0.45)';
-  ctx.font = '17px system-ui, "Microsoft YaHei", sans-serif';
-  ctx.fillText('52 格 · 经典地产大亨', SIZE / 2, SIZE / 2 - 30);
+  ctx.fillText('大富翁', cx, y + 52);
 
+  // 骰子
+  const d = diceDisplay || (state && state.dice ? { d1: state.dice[0], d2: state.dice[1] } : null);
+  if (d) {
+    drawDice(cx - 60, y + 130, 84, d.d1);
+    drawDice(cx + 60, y + 130, 84, d.d2);
+  } else {
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.font = '16px system-ui, "Microsoft YaHei", sans-serif';
+    ctx.fillText('点击「掷骰子」开始', cx, y + 130);
+  }
+
+  // 当前玩家
   if (state) {
     const cur = state.players[state.current];
-    const cardW = 270, cardH = 62, cx = SIZE / 2 - cardW / 2, cy = SIZE / 2 + 8;
+    const cardW = 240, cardH = 44, ccx = cx - cardW / 2, ccy = y + 200;
     ctx.fillStyle = 'rgba(255,255,255,0.07)';
-    roundRect(cx, cy, cardW, cardH, 14);
+    roundRect(ccx, ccy, cardW, cardH, 12);
     ctx.fill();
     ctx.strokeStyle = cur.color;
     ctx.lineWidth = 2;
-    roundRect(cx, cy, cardW, cardH, 14);
+    roundRect(ccx, ccy, cardW, cardH, 12);
     ctx.stroke();
-    drawToken(cx + 30, cy + cardH / 2, 12, cur.color);
+    drawToken(ccx + 26, ccy + cardH / 2, 10, cur.color);
     ctx.fillStyle = '#fff';
-    ctx.font = '700 19px system-ui, "Microsoft YaHei", sans-serif';
+    ctx.font = '700 16px system-ui, "Microsoft YaHei", sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('轮到：' + cur.name, cx + 52, cy + cardH / 2 + 1);
-    ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.font = '15px system-ui, "Microsoft YaHei", sans-serif';
-    ctx.fillText('第 ' + state.round + ' 回合', SIZE / 2, SIZE / 2 + 96);
+    ctx.fillText('轮到：' + cur.name + ' · 第 ' + state.round + ' 回合', ccx + 46, ccy + cardH / 2 + 1);
+
+    // 资产排行榜
+    drawLeaderboard(state, y);
   }
+}
+
+function drawDice(cx, cy, size, value) {
+  ctx.fillStyle = '#ffffff';
+  roundRect(cx - size / 2, cy - size / 2, size, size, size * 0.22);
+  ctx.fill();
+  ctx.strokeStyle = '#2b3a4a';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  const positions = {
+    1: [[0, 0]],
+    2: [[-1, -1], [1, 1]],
+    3: [[-1, -1], [0, 0], [1, 1]],
+    4: [[-1, -1], [1, -1], [-1, 1], [1, 1]],
+    5: [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]],
+    6: [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]],
+  };
+  ctx.fillStyle = '#2b3a4a';
+  const r = size * 0.13;
+  (positions[value] || []).forEach(([dx, dy]) => {
+    ctx.beginPath();
+    ctx.arc(cx + dx * size * 0.26, cy + dy * size * 0.26, r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function drawLeaderboard(state, topY) {
+  const assets = state.players.map((p) => {
+    let value = p.money;
+    TILES.forEach((t) => {
+      if (state.tileOwners[t.id] === p.id) {
+        value += (t.type === 'railroad' ? 200 : t.type === 'utility' ? 150 : (t.price || 0));
+        value += (state.tileHouses[t.id] || 0) * (GROUPS[t.group] ? GROUPS[t.group].houseCost : 100);
+      }
+    });
+    return { id: p.id, name: p.name, color: p.color, value, bankrupt: p.bankrupt };
+  });
+  assets.sort((a, b) => b.value - a.value);
+
+  const x0 = CORNER + 40, w = SIZE_W - CORNER * 2 - 80;
+  const y0 = topY + 270;
+  const rowH = 30;
+  ctx.textBaseline = 'middle';
+  assets.forEach((a, i) => {
+    const ry = y0 + i * rowH;
+    ctx.fillStyle = a.color;
+    ctx.beginPath();
+    ctx.arc(x0 + 8, ry, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = i === 0 ? '#f7d774' : '#c6d2e0';
+    ctx.font = (i === 0 ? '700 ' : '600 ') + '15px system-ui, "Microsoft YaHei", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText((i + 1) + '. ' + a.name + (a.bankrupt ? '（破产）' : ''), x0 + 24, ry);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = i === 0 ? '#f7d774' : '#8fa0b5';
+    ctx.font = '600 14px system-ui, "Microsoft YaHei", sans-serif';
+    ctx.fillText('¥' + a.value, x0 + w, ry);
+  });
 }
 
 function updateTokens(players) {
@@ -290,6 +373,46 @@ function drawToken(px, py, radius, color) {
   ctx.strokeStyle = 'rgba(255,255,255,0.85)';
   ctx.lineWidth = 2;
   ctx.stroke();
+}
+
+// 点击检测：把 canvas 点击坐标换算成逻辑坐标，找到对应格子
+let tileClickCallback = null;
+function bindTileClick() {
+  if (!canvas || !tileClickCallback) return;
+  canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    const scale = SIZE_W / rect.width;
+    const x = (e.clientX - rect.left) * scale;
+    const y = (e.clientY - rect.top) * scale;
+    for (let i = 0; i < BOARD_SIZE; i++) {
+      const r = tileRect(i);
+      if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) {
+        tileClickCallback(i);
+        return;
+      }
+    }
+  });
+}
+export function onTileClick(callback) {
+  tileClickCallback = callback;
+  bindTileClick();
+}
+
+export function animateDice(d1, d2) {
+  const start = performance.now();
+  function frame() {
+    const now = performance.now();
+    if (now - start >= 800) {
+      diceDisplay = { d1, d2 };
+      redraw();
+      return;
+    }
+    diceDisplay = { d1: 1 + Math.floor(Math.random() * 6), d2: 1 + Math.floor(Math.random() * 6) };
+    redraw();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
 }
 
 export function animateMove(playerId, from, to, onDone) {

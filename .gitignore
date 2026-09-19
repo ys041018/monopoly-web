@@ -3,8 +3,9 @@ node_modules/
 .DS_Store
 verify-*.mjs
 diag-*.mjs
-pw-test.mjs
+pw-*.mjs
 hold-*.mjs
 fix-*.mjs
 update-*.mjs
+update8.mjs
 test-*.mjs

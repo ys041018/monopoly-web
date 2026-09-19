@@ -6,9 +6,9 @@ import { GROUPS, RAILROAD_PRICE, UTILITY_PRICE } from '../js/data/tiles.js';
 export const START_MONEY = 1500;
 export const PASS_GO_BONUS = 200;
 export const JAIL_BAIL = 50;
-export const JAIL_TILE_ID = 39;        // 监狱（探监/停留）
-export const GOTO_JAIL_TILE_ID = 13;   // 进监狱
-export const MAX_PLAYERS = 6;
+export const JAIL_TILE_ID = 47;        // 监狱（探监/停留）
+export const GOTO_JAIL_TILE_ID = 17;   // 进监狱
+export const MAX_PLAYERS = 8;
 export const MIN_PLAYERS = 2;
 export const DEFAULT_MAX_ROUNDS = 60;
 
@@ -22,8 +22,9 @@ export const UNMORTGAGE_INTEREST = 0.1;           // 赎回 +10%
 // 地产租金：baseRent × (level+1)，垄断（集齐同色组）翻倍
 export function calcPropertyRent(tile, level, monopoly) {
   const l = Math.max(0, Math.min(level, HOTEL_LEVEL));
-  const rent = tile.baseRent * (l + 1);
-  return monopoly ? rent * 2 : rent;
+  const rent = tile.rent[l];
+  if (monopoly && l === 0) return rent * 2;
+  return rent;
 }
 
 // 车站租金：按持有车站数量
@@ -49,3 +50,4 @@ export function getPropertyPrice(tile) {
   if (tile.type === 'utility') return UTILITY_PRICE;
   return tile.price || 0;
 }
+
