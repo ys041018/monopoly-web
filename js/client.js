@@ -32,6 +32,7 @@ let myId = null, myIsHost = false, isSpectator = false;
 let players = [], state = null;
 let gotError = false, entered = false, animating = false;
 let prevLogLength = 0;
+let logRendered = 0;
 let prevLastCard = null;
 let cardTimer = null;
 
@@ -301,60 +302,113 @@ function renderMortgagePanel() {
 // ---------- 交易 ----------
 function renderTradePanel() {
   tradePanel.innerHTML = '';
-  const others = state.players.filter(p => p.id !== myId);
+  const others = state.players.filter(p => p.id !== myId && !p.bankrupt);
   if (others.length === 0) { tip(tradePanel, '没有可交易的对象'); return; }
 
-  const sel = document.createElement('select');
-  others.forEach(p => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; sel.appendChild(o); });
+  // 交易对象
   tradePanel.appendChild(mkTitle('交易对象'));
+  const sel = document.createElement('select');
+  others.forEach(p => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.name + '（¥' + p.money + '）'; sel.appendChild(o); });
   tradePanel.appendChild(sel);
 
-  tradePanel.appendChild(mkTitle('给对方的地产'));
+  // 我给对方的地产
+  tradePanel.appendChild(mkTitle('我给对方的地产'));
   const myBox = document.createElement('div');
+  myBox.className = 'trade-tiles';
   TILES.filter(t => (t.type === 'property' || t.type === 'railroad' || t.type === 'utility') && ownedByMe(t)).forEach(t => {
     const hasHouse = (state.tileHouses[t.id] || 0) > 0;
     const lab = document.createElement('label');
+    lab.className = 'trade-tile';
+    if (t.type === 'property') lab.style.borderLeftColor = GROUPS[t.group].color;
     const cb = document.createElement('input');
     cb.type = 'checkbox'; cb.value = t.id; cb.dataset.mine = '1';
     cb.disabled = hasHouse;
     lab.appendChild(cb);
-    lab.appendChild(document.createTextNode(t.name + (hasHouse ? '（有房不可交易）' : '')));
+    const info = document.createElement('span');
+    info.className = 'trade-tile-info';
+    info.innerHTML = '<b>' + escapeHtml(t.name) + '</b><i>¥' + tilePrice(t) + (hasHouse ? ' · 有房不可交易' : '') + '</i>';
+    lab.appendChild(info);
     myBox.appendChild(lab);
   });
   tradePanel.appendChild(myBox);
 
+  // 要对方的地产
   tradePanel.appendChild(mkTitle('要对方的地产'));
   const theirBox = document.createElement('div');
+  theirBox.className = 'trade-tiles';
   function renderTheir() {
     theirBox.innerHTML = '';
     const toId = sel.value;
     TILES.filter(t => (t.type === 'property' || t.type === 'railroad' || t.type === 'utility') && state.tileOwners[t.id] === toId).forEach(t => {
       const hasHouse = (state.tileHouses[t.id] || 0) > 0;
       const lab = document.createElement('label');
+      lab.className = 'trade-tile';
+      if (t.type === 'property') lab.style.borderLeftColor = GROUPS[t.group].color;
       const cb = document.createElement('input');
       cb.type = 'checkbox'; cb.value = t.id; cb.dataset.theirs = '1';
       cb.disabled = hasHouse;
       lab.appendChild(cb);
-      lab.appendChild(document.createTextNode(t.name + (hasHouse ? '（有房不可交易）' : '')));
+      const info = document.createElement('span');
+      info.className = 'trade-tile-info';
+      info.innerHTML = '<b>' + escapeHtml(t.name) + '</b><i>¥' + tilePrice(t) + (hasHouse ? ' · 有房不可交易' : '') + '</i>';
+      lab.appendChild(info);
       theirBox.appendChild(lab);
     });
+    const to = state.players.find(p => p.id === toId);
+    if (to) {
+      const bal = document.createElement('div');
+      bal.className = 'trade-bal';
+      bal.textContent = to.name + ' 现金：¥' + to.money;
+      theirBox.appendChild(bal);
+    }
   }
   renderTheir();
   sel.addEventListener('change', renderTheir);
   tradePanel.appendChild(theirBox);
 
-  const moneyGive = mkMoneyInput('我给对方的现金');
-  const moneyGet = mkMoneyInput('我要对方的现金');
+  // 现金
+  tradePanel.appendChild(mkTitle('现金（可选）'));
+  const me = state.players.find(p => p.id === myId);
+  const bal = document.createElement('div');
+  bal.className = 'trade-bal';
+  bal.textContent = '我的现金：¥' + (me ? me.money : 0);
+  tradePanel.appendChild(bal);
+  const moneyGive = mkMoneyInput('我给对方现金');
+  const moneyGet = mkMoneyInput('我要对方现金');
+  moneyGive.className = 'money-input';
+  moneyGet.className = 'money-input';
   tradePanel.appendChild(moneyGive);
   tradePanel.appendChild(moneyGet);
 
-  const submit = mkBtn('发起交易提议', 'primary');
+  // 实时汇总
+  const summary = document.createElement('div');
+  summary.className = 'trade-summary';
+  const upd = () => {
+    const gt = myBox.querySelectorAll('input:checked').length;
+    const rt = theirBox.querySelectorAll('input:checked').length;
+    const gm = Number(moneyGive.value) || 0;
+    const rm = Number(moneyGet.value) || 0;
+    summary.textContent = '我给出 ' + gt + ' 块地 + ¥' + gm + '，换对方 ' + rt + ' 块地 + ¥' + rm;
+  };
+  [myBox, theirBox, moneyGive, moneyGet].forEach(el => el.addEventListener('change', upd));
+  upd();
+  tradePanel.appendChild(summary);
+
+  // 提交
+  const submit = mkBtn('发起交易提议', 'start');
+  submit.className = 'btn start trade-submit';
   submit.addEventListener('click', () => {
     const giveTiles = [...myBox.querySelectorAll('input:checked')].map(i => Number(i.value));
     const getTiles = [...theirBox.querySelectorAll('input:checked')].map(i => Number(i.value));
+    const giveMoney = Number(moneyGive.value) || 0;
+    const getMoney = Number(moneyGet.value) || 0;
+    if (giveTiles.length === 0 && getTiles.length === 0 && giveMoney === 0 && getMoney === 0) {
+      summary.textContent = '⚠️ 请至少选择一块地产或填写现金';
+      return;
+    }
     ws.send(JSON.stringify({
       type: 'propose_trade',
-      proposal: { to: sel.value, giveTiles, getTiles, giveMoney: Number(moneyGive.value) || 0, getMoney: Number(moneyGet.value) || 0 }
+      proposal: { to: sel.value, giveTiles, getTiles, giveMoney, getMoney }
     }));
     tradePanel.classList.add('hidden');
   });
@@ -621,14 +675,25 @@ function detectSound() {
   newLogs.forEach((l) => playForLog(l));
 }
 
+function appendLog(line) {
+  const li = document.createElement('li');
+  li.textContent = line;
+  logList.appendChild(li);
+}
+
 function renderLog() {
-  logList.innerHTML = '';
   if (!state || !state.log) return;
-  state.log.slice(-30).forEach((line) => {
-    const li = document.createElement('li');
-    li.textContent = line;
-    logList.appendChild(li);
-  });
+  const all = state.log;
+  if (logRendered > all.length || logRendered === 0) {
+    logList.innerHTML = '';
+    logRendered = Math.max(0, all.length - 30);
+    for (let i = logRendered; i < all.length; i++) appendLog(all[i]);
+  } else {
+    for (let i = logRendered; i < all.length; i++) appendLog(all[i]);
+    while (logList.childElementCount > 30) logList.removeChild(logList.firstChild);
+  }
+  logRendered = all.length;
+  logList.scrollTop = logList.scrollHeight;
 }
 
 function setMsg(text, isError) { lobbyMsg.textContent = text; lobbyMsg.className = 'msg' + (isError ? ' error' : ''); }
