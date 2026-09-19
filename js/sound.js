@@ -58,6 +58,16 @@ export function play(type) {
       tone(900, 0.06, 'sine', 0.12);
       tone(1200, 0.08, 'sine', 0.12, 0.05);
       break;
+    case 'chance':
+      tone(660, 0.08, 'sine', 0.14);
+      tone(880, 0.08, 'sine', 0.14, 0.08);
+      tone(1100, 0.12, 'sine', 0.14, 0.16);
+      break;
+    case 'chest':
+      tone(440, 0.1, 'triangle', 0.14);
+      tone(330, 0.1, 'triangle', 0.14, 0.09);
+      tone(392, 0.16, 'triangle', 0.14, 0.18);
+      break;
     case 'jail':
       tone(150, 0.3, 'sawtooth', 0.15);
       break;
@@ -82,7 +92,6 @@ export function playForLog(log) {
   else if (log.includes('购买了') || log.includes('拍得')) play('buy');
   else if (log.includes('租金')) play('rent');
   else if (log.includes('盖房')) play('build');
-  else if (log.includes('抽到')) play('card');
   else if (log.includes('监狱')) play('jail');
   else if (log.includes('获胜') || log.includes('破产')) play('win');
   else if (log.includes('出价')) play('bid');

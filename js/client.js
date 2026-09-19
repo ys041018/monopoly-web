@@ -8,7 +8,7 @@ window.addEventListener('error', (e) => {
   if (t) t.textContent = '⚠️ ' + (e.message || '未知错误') + ' @ ' + (e.filename||'').split('/').pop() + ':' + e.lineno;
 });
 import { TILES, GROUPS } from './data/tiles.js';
-import { playForLog } from './sound.js';
+import { playForLog, play } from './sound.js';
 
 const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
 const ws = new WebSocket(`${proto}//${location.host}`);
@@ -654,6 +654,8 @@ function detectCard() {
   const key = state.lastCard.type + '|' + state.lastCard.text;
   if (prevLastCard === key) return;
   prevLastCard = key;
+  // 命运 / 机会播放不同特殊音效
+  play(state.lastCard.type === 'chance' ? 'chance' : 'chest');
   showCard(state.lastCard);
 }
 
