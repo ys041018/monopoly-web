@@ -678,9 +678,24 @@ function detectSound() {
   newLogs.forEach((l) => playForLog(l));
 }
 
+const tileColorMap = new Map();
+TILES.forEach(t => {
+  if (t.type === 'property') tileColorMap.set(t.name, GROUPS[t.group].color);
+  else if (t.type === 'railroad') tileColorMap.set(t.name, '#78909C');
+  else if (t.type === 'utility') tileColorMap.set(t.name, '#90A4AE');
+});
+
+function colorizeLog(line) {
+  let html = escapeHtml(line);
+  tileColorMap.forEach((color, name) => {
+    html = html.split(name).join('<span style="color:' + color + ';font-weight:700">' + name + '</span>');
+  });
+  return html;
+}
+
 function appendLog(line) {
   const li = document.createElement('li');
-  li.textContent = line;
+  li.innerHTML = colorizeLog(line);
   logList.appendChild(li);
 }
 
