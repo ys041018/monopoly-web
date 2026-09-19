@@ -105,6 +105,7 @@ export class GameRoom {
       tileMortgaged: {}, // tileId -> true
       pendingTrade: null,
       auction: null,
+      auctionQueue: null,
       lastCard: null,
       pendingTile: null,
       lastMove: null,
@@ -152,6 +153,7 @@ export class GameRoom {
 
     let phase = 'after_move';
     let pendingTile = null;
+    let creditor = null; // 欠款债主：null 表示银行
 
     if (tile.type === 'property' || tile.type === 'railroad' || tile.type === 'utility') {
       const ownerId = this.state.tileOwners[to];
@@ -165,6 +167,7 @@ export class GameRoom {
         const owner = ps.find(p => p.id === ownerId);
         if (owner) owner.money += rent;
         logMsg += '，支付租金 ¥' + rent + ' 给 ' + (owner ? owner.name : '?');
+        if (cur.money < 0) creditor = ownerId;
       } else {
         logMsg += '（自己的地产）';
       }
@@ -193,8 +196,7 @@ export class GameRoom {
     this.addLog(logMsg);
 
     if (cur.money < 0) {
-      this.bankrupt(cur);
-      if (this.state.phase !== 'gameOver') this.finishTurn();
+      this.settleDebt(cur, creditor);
     } else {
       this.state.phase = phase;
       this.state.pendingTile = pendingTile;
@@ -237,6 +239,7 @@ export class GameRoom {
     this.state.phase = 'auction';
     this.state.pendingTile = null;
     this.state.lastMove = null;
+    this.state.auctionQueue = null;
     this.state.auction = { tileId, currentBid: 0, currentBidder: null, deadline: Date.now() + 15000 };
     this.broadcastState();
     this.scheduleAuctionEnd();
@@ -285,7 +288,11 @@ export class GameRoom {
       this.addLog('「' + tile.name + '」无人出价，流拍');
     }
     this.state.auction = null;
-    this.finishTurn();
+    if (this.state.auctionQueue && this.state.auctionQueue.length > 0) {
+      this._startNextAuction();
+    } else {
+      this.finishTurn();
+    }
     this.broadcastState();
   }
 
@@ -594,17 +601,102 @@ export class GameRoom {
     return { ok: true };
   }
 
-  bankrupt(player) {
+  // 欠款结算：自动变卖房屋、抵押地产，仍不足则宣告破产
+  settleDebt(cur, creditorId) {
+    this._autoSellHouses(cur);
+    if (cur.money >= 0) {
+      this.state.phase = 'after_move';
+      this.state.pendingTile = null;
+      this.addLog(cur.name + ' 变卖房屋后还清债务');
+      return;
+    }
+    this._autoMortgage(cur);
+    if (cur.money >= 0) {
+      this.state.phase = 'after_move';
+      this.state.pendingTile = null;
+      this.addLog(cur.name + ' 抵押地产后还清债务');
+      return;
+    }
+    this.bankrupt(cur, creditorId);
+    if (this.state.phase === 'gameOver') return;
+    if (this.state.phase !== 'auction') this.finishTurn();
+  }
+
+  _autoSellHouses(cur) {
+    if (cur.money >= 0) return;
+    let changed = true;
+    while (changed && cur.money < 0) {
+      changed = false;
+      let best = null;
+      for (const t of TILES) {
+        if (t.type !== 'property') continue;
+        if (this.state.tileOwners[t.id] !== cur.id) continue;
+        const h = this.state.tileHouses[t.id] || 0;
+        if (h <= 0) continue;
+        if (best == null || h > (this.state.tileHouses[best] || 0)) best = t.id;
+      }
+      if (best == null) break;
+      const refund = Math.floor(getHouseCost(TILES[best].group) / 2);
+      this.state.tileHouses[best] -= 1;
+      cur.money += refund;
+      this.addLog(cur.name + ' 变卖「' + TILES[best].name + '」房屋，获得 ¥' + refund);
+      changed = true;
+    }
+  }
+
+  _autoMortgage(cur) {
+    if (cur.money >= 0) return;
+    for (const t of TILES) {
+      if (cur.money >= 0) break;
+      if (t.type !== 'property' && t.type !== 'railroad' && t.type !== 'utility') continue;
+      if (this.state.tileOwners[t.id] !== cur.id) continue;
+      if (this.state.tileMortgaged[t.id]) continue;
+      const amount = Math.floor(getPropertyPrice(t) / 2);
+      cur.money += amount;
+      this.state.tileMortgaged[t.id] = true;
+      this.addLog(cur.name + ' 将「' + t.name + '」抵押给银行，获得 ¥' + amount);
+    }
+  }
+
+  bankrupt(player, creditorId) {
     player.bankrupt = true;
-    Object.keys(this.state.tileOwners).forEach((tid) => {
-      if (this.state.tileOwners[tid] === player.id) {
+    const ownedTiles = Object.keys(this.state.tileOwners)
+      .filter(tid => this.state.tileOwners[tid] === player.id)
+      .map(Number);
+    const cash = Math.max(0, player.money);
+    player.money = 0;
+
+    const creditor = creditorId ? this.state.players.find(p => p.id === creditorId) : null;
+    if (creditor) {
+      creditor.money += cash;
+      ownedTiles.forEach(tid => { this.state.tileOwners[tid] = creditor.id; });
+      this.addLog(player.name + ' 宣告破产，资产全部归 ' + creditor.name);
+    } else {
+      ownedTiles.forEach(tid => {
         delete this.state.tileOwners[tid];
         this.state.tileHouses[tid] = 0;
         this.state.tileMortgaged[tid] = false;
-      }
-    });
-    this.addLog(player.name + ' 破产出局！');
+      });
+      this.addLog(player.name + ' 宣告破产，地产由银行拍卖');
+    }
+
     this.checkWinner();
+    if (this.state.phase === 'gameOver') return;
+
+    if (!creditor && ownedTiles.length > 0) {
+      this.state.auctionQueue = ownedTiles;
+      this._startNextAuction();
+    }
+  }
+
+  _startNextAuction() {
+    if (!this.state.auctionQueue || this.state.auctionQueue.length === 0) return;
+    const tileId = this.state.auctionQueue.shift();
+    this.state.auction = { tileId, currentBid: 0, currentBidder: null, deadline: Date.now() + 15000 };
+    this.state.phase = 'auction';
+    this.state.pendingTile = null;
+    this.addLog('银行拍卖「' + TILES[tileId].name + '」');
+    this.scheduleAuctionEnd();
   }
 
   checkWinner() {

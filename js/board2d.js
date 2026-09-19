@@ -136,21 +136,20 @@ function drawProperty(id, tile, r, vertical, corner, state) {
   ctx.fill();
   drawText(price, bx + badgeW / 2, by + badgeH / 2 + 0.5, 12.5, '#fff', 'center', 'bold');
 
-  // 建筑：绿色房子 / 红色旅馆（固定色，不与玩家色混淆）
+  // 建筑：绿色小洋房（1-4 房），5 级进化为豪华旅馆
   if (owner) {
     const houses = state.tileHouses[id] || 0;
-    for (let hh = 0; hh < houses; hh++) {
-      const isHotel = hh === 4;
-      const hs = 8;
-      const hx = r.x + r.w / 2 + (hh - (houses - 1) / 2) * (hs + 2);
-      const hy = vertical ? r.y + r.h * 0.52 : r.y + r.h * 0.54;
-      ctx.fillStyle = isHotel ? '#e53935' : '#3f8f4f';
-      ctx.fillRect(hx - hs / 2, hy - hs / 2, hs, hs);
-      ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(hx - hs / 2, hy - hs / 2, hs, hs);
+    const hy = vertical ? r.y + r.h * 0.52 : r.y + r.h * 0.54;
+    if (houses >= 5) {
+      drawHotel(r.x + r.w / 2, hy, 16);
+    } else {
+      const hs = 11;
+      for (let hh = 0; hh < houses; hh++) {
+        const hx = r.x + r.w / 2 + (hh - (houses - 1) / 2) * (hs + 2);
+        drawHouse(hx, hy, hs);
+      }
     }
-    // 归属徽章：玩家色圆形 + 名字首字，放在卡片右上角
+    // 归属徽章：玩家色圆形 + 玩家序号，放在卡片右上角
     drawOwnerBadge(owner, x + w - 12, y + 12, 22, state.players.indexOf(owner) + 1);
   }
 }
@@ -469,6 +468,66 @@ function drawVerticalText(text, cx, topY, bottomY, size, color) {
   ctx.font = '800 ' + s + 'px system-ui, "Microsoft YaHei", sans-serif';
   ctx.fillStyle = color;
   chars.forEach(ch => { ctx.fillText(ch, cx, y); y += step; });
+}
+
+function drawHouse(cx, cy, s) {
+  const w = s, h = s;
+  const x = cx - w / 2, y = cy - h / 2;
+  // 主体
+  ctx.fillStyle = '#4caf50';
+  roundRect(x, y + h * 0.15, w, h * 0.85, 1.5);
+  ctx.fill();
+  ctx.strokeStyle = '#2e7d32';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  // 屋顶
+  ctx.beginPath();
+  ctx.moveTo(x - 1, y + h * 0.18);
+  ctx.lineTo(cx, y - h * 0.35);
+  ctx.lineTo(x + w + 1, y + h * 0.18);
+  ctx.closePath();
+  ctx.fillStyle = '#8d4a2f';
+  ctx.fill();
+  ctx.strokeStyle = '#5d2e1b';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  // 窗户
+  ctx.fillStyle = '#ffd54f';
+  ctx.fillRect(cx - 1.5, y + h * 0.45, 3, 3);
+  // 高光
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.fillRect(x + 1.5, y + h * 0.2, w * 0.3, h * 0.3);
+}
+
+function drawHotel(cx, cy, s) {
+  const w = s, h = s * 1.15;
+  const x = cx - w / 2, y = cy - h / 2;
+  // 主体渐变
+  const g = ctx.createLinearGradient(x, y, x, y + h);
+  g.addColorStop(0, '#e57373');
+  g.addColorStop(1, '#c62828');
+  ctx.fillStyle = g;
+  roundRect(x, y + h * 0.12, w, h * 0.88, 2);
+  ctx.fill();
+  ctx.strokeStyle = '#b71c1c';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  // 金色屋顶
+  ctx.beginPath();
+  ctx.moveTo(x - 1.5, y + h * 0.16);
+  ctx.lineTo(cx, y - h * 0.4);
+  ctx.lineTo(x + w + 1.5, y + h * 0.16);
+  ctx.closePath();
+  ctx.fillStyle = '#f7d774';
+  ctx.fill();
+  ctx.strokeStyle = '#c9a227';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  // H 标识
+  drawText('H', cx, y + h * 0.62, Math.round(s * 0.42), '#ffffff', 'center', 'bold');
+  // 高光
+  ctx.fillStyle = 'rgba(255,255,255,0.28)';
+  ctx.fillRect(x + 1.5, y + h * 0.2, w * 0.28, h * 0.3);
 }
 
 function drawOwnerBadge(owner, cx, cy, size, label) {
