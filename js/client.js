@@ -134,6 +134,8 @@ function updateActions() {
   if (!state) return;
   if (state.phase === 'gameOver') { waitingTip.textContent = '游戏已结束'; waitingTip.classList.remove('hidden'); return; }
   const myTurn = !isSpectator && state.players[state.current].id === myId;
+  // 交易不受回合限制：任何时候（非旁观者）都能发起
+  if (!isSpectator) tradeBtn.classList.remove('hidden');
   if (!myTurn) { waitingTip.classList.remove('hidden'); return; }
 
   if (state.phase === 'rolling') {

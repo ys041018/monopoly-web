@@ -453,8 +453,9 @@ export class GameRoom {
 
   proposeTrade(playerId, proposal) {
     if (!this.state) return { error: '游戏未开始' };
-    const cur = this.state.players[this.state.current];
-    if (cur.id !== playerId) return { error: '还没轮到你' };
+    // 交易不受回合限制：任何未破产的玩家都能随时发起
+    const from = this.state.players.find(p => p.id === playerId);
+    if (!from || from.bankrupt) return { error: '无法发起交易' };
     const to = this.state.players.find(p => p.id === proposal.to);
     if (!to) return { error: '交易对象不存在' };
     const giveTiles = proposal.giveTiles || [];
