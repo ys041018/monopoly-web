@@ -1,7 +1,7 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg-0: #0f1b2d;
+  --bg-0: #0e2a36;
   --card: rgba(255, 255, 255, 0.055);
   --card-border: rgba(255, 255, 255, 0.09);
   --text: #eaf0f7;
@@ -18,9 +18,9 @@ body {
   color: var(--text);
   min-height: 100vh;
   background:
-    radial-gradient(1000px 600px at 15% -10%, rgba(80, 140, 255, 0.18), transparent 60%),
-    radial-gradient(900px 600px at 110% 110%, rgba(232, 184, 74, 0.14), transparent 55%),
-    linear-gradient(160deg, #0f1b2d 0%, #152238 50%, #0d1a2b 100%);
+    radial-gradient(1000px 600px at 15% -10%, rgba(56, 200, 170, 0.22), transparent 60%),
+    radial-gradient(900px 600px at 110% 110%, rgba(255, 186, 92, 0.18), transparent 55%),
+    linear-gradient(160deg, #0e2a36 0%, #124154 50%, #0c2430 100%);
   background-attachment: fixed;
 }
 
@@ -170,8 +170,8 @@ h2 { font-size: 15px; color: var(--text); }
 .build-row .btn { padding: 8px 12px; font-size: 13px; }
 .waiting-tip { text-align: center; color: var(--muted); font-size: 14px; padding: 8px 0; }
 
-.log-list { list-style: none; margin-top: 8px; flex: 1; overflow-y: auto; font-size: 14px; display: flex; flex-direction: column; gap: 7px; }
-.log-list li { color: #b8c5d6; line-height: 1.45; }
+.log-list { list-style: none; margin-top: 8px; flex: 1; overflow-y: auto; font-size: 16px; display: flex; flex-direction: column; gap: 8px; }
+.log-list li { color: #cdd9e6; line-height: 1.5; }
 .log-list li::before { content: "· "; color: var(--gold-1); font-weight: 700; }
 
 
