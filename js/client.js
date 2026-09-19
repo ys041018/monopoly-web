@@ -9,7 +9,8 @@ window.addEventListener('error', (e) => {
 });
 import { TILES, GROUPS } from './data/tiles.js';
 
-const ws = new WebSocket(`ws://${location.host}`);
+const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+const ws = new WebSocket(`${proto}//${location.host}`);
 
 const $ = (id) => document.getElementById(id);
 const lobby = $('lobby'), game = $('game');
@@ -413,5 +414,6 @@ function renderLog() {
 function setMsg(text, isError) { lobbyMsg.textContent = text; lobbyMsg.className = 'msg' + (isError ? ' error' : ''); }
 
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
 
 
