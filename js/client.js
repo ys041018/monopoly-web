@@ -37,7 +37,7 @@ if (localStorage.getItem('monopoly_sound') === '0') { setSoundEnabled(false); }
 let players = [], state = null;
 let gotError = false, entered = false, animating = false;
 let prevLogLength = 0;
-let logRendered = 0;
+let lastLogText = null;
 let prevLastCard = null;
 let cardTimer = null;
 
@@ -754,15 +754,17 @@ function appendLog(line) {
 function renderLog() {
   if (!state || !state.log) return;
   const all = state.log;
-  if (logRendered > all.length || logRendered === 0) {
+  if (logList.childElementCount === 0 || lastLogText == null || !all.includes(lastLogText)) {
     logList.innerHTML = '';
-    logRendered = Math.max(0, all.length - 30);
-    for (let i = logRendered; i < all.length; i++) appendLog(all[i]);
+    const start = Math.max(0, all.length - 30);
+    for (let i = start; i < all.length; i++) appendLog(all[i]);
+    lastLogText = all[all.length - 1] || null;
   } else {
-    for (let i = logRendered; i < all.length; i++) appendLog(all[i]);
+    const idx = all.lastIndexOf(lastLogText);
+    for (let i = idx + 1; i < all.length; i++) appendLog(all[i]);
     while (logList.childElementCount > 30) logList.removeChild(logList.firstChild);
+    lastLogText = all[all.length - 1] || null;
   }
-  logRendered = all.length;
   logList.scrollTop = logList.scrollHeight;
 }
 
