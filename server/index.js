@@ -94,16 +94,17 @@ wss.on('connection', (ws) => {
       return;
     }
 
+    if (msg.type === 'create_room') {
+      const code = genCode();
+      rooms.set(code, new GameRoom());
+      ws.send(JSON.stringify({ type: 'room_created', roomCode: code }));
+      return;
+    }
+
     if (!playerId) { sendError('请先加入房间'); return; }
     if (isSpectator) return;
 
     switch (msg.type) {
-      case 'create_room': {
-        const code = genCode();
-        rooms.set(code, new GameRoom());
-        ws.send(JSON.stringify({ type: 'room_created', roomCode: code }));
-        break;
-      }
       case 'add_ai': {
         const r = room.addAI(playerId);
         if (r.error) room.sendError(ws, r.error);
