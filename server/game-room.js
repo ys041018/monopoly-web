@@ -4,7 +4,7 @@
 // ============================================================
 import {
   START_MONEY, MAX_PLAYERS, MIN_PLAYERS, PASS_GO_BONUS,
-  JAIL_TILE_ID, GOTO_JAIL_TILE_ID,
+  JAIL_TILE_ID, GOTO_JAIL_TILE_ID, JAIL_BAIL,
   calcPropertyRent, calcRailroadRent, calcUtilityRent, getPropertyPrice, getHouseCost, HOTEL_LEVEL, DEFAULT_MAX_ROUNDS,
 } from './rules.js';
 import { TILES, BOARD_SIZE } from '../js/data/tiles.js';
@@ -66,7 +66,7 @@ export class GameRoom {
     this.players.delete(playerId);
 
     if (this.started && this.state) {
-      const online = [...this.players.values()].filter(p => p.ws && p.ws.readyState === 1).length;
+      const online = [...this.players.values()].filter(p => p.isAI || (p.ws && p.ws.readyState === 1)).length;
       if (online < MIN_PLAYERS) {
         console.log('[自动结束] 在线人数不足，游戏回到大厅');
         this.resetToLobby();
@@ -90,7 +90,7 @@ export class GameRoom {
 
     this.started = true;
     const players = [...this.players.values()].map(p => ({
-      id: p.id, name: p.name, color: p.color, isHost: p.isHost,
+      id: p.id, name: p.name, color: p.color, isHost: p.isHost, isAI: !!p.isAI,
       position: 0, money: START_MONEY, inJail: false, jailedTurns: 0, outOfJailCards: 0, rest: false, bankrupt: false,
     }));
 
@@ -124,18 +124,79 @@ export class GameRoom {
     if (cur.id !== playerId) return { error: '还没轮到你' };
     if (this.state.phase !== 'rolling') return { error: '当前阶段不能掷骰' };
 
-    // 在狱中：自动跳过（简化）
+    const d1 = 1 + Math.floor(Math.random() * 6);
+    const d2 = 1 + Math.floor(Math.random() * 6);
+
     if (cur.inJail) {
-      cur.jailedTurns = 0;
-      cur.inJail = false;
-      this.addLog(cur.name + ' 出狱');
-      this.finishTurn();
-      this.broadcastState();
+      if (d1 === d2) {
+        cur.inJail = false;
+        cur.jailedTurns = 0;
+        this.addLog(cur.name + ' 掷出双数 ' + d1 + '+' + d2 + '，成功出狱！');
+        this._moveAndResolve(cur, ps, d1, d2, cur.name + ' 掷出 ' + d1 + '+' + d2);
+      } else {
+        cur.jailedTurns = (cur.jailedTurns || 0) + 1;
+        if (cur.jailedTurns >= 3) {
+          cur.inJail = false;
+          cur.jailedTurns = 0;
+          cur.money -= JAIL_BAIL;
+          this.addLog(cur.name + ' 已在监狱满 3 回合，支付 ¥' + JAIL_BAIL + ' 出狱');
+          this._moveAndResolve(cur, ps, d1, d2, cur.name + ' 掷出 ' + d1 + '+' + d2);
+        } else {
+          this.addLog(cur.name + ' 掷出 ' + d1 + '+' + d2 + '，不是双数，继续关押（' + cur.jailedTurns + '/3）');
+          this.state.dice = [d1, d2];
+          this.finishTurn();
+          this.broadcastState();
+        }
+      }
       return { ok: true };
     }
 
+    this._moveAndResolve(cur, ps, d1, d2, cur.name + ' 掷出 ' + d1 + '+' + d2);
+    return { ok: true };
+  }
+
+  // 付保释金出狱
+  payBail(playerId) {
+    if (!this.state) return { error: '游戏未开始' };
+    const ps = this.state.players;
+    const cur = ps[this.state.current];
+    if (cur.id !== playerId) return { error: '还没轮到你' };
+    if (this.state.phase !== 'rolling') return { error: '当前阶段不能操作' };
+    if (!cur.inJail) return { error: '你不在监狱' };
+    if (cur.money < JAIL_BAIL) return { error: '现金不足，无法保释' };
+
+    cur.money -= JAIL_BAIL;
+    cur.inJail = false;
+    cur.jailedTurns = 0;
+    this.addLog(cur.name + ' 支付 ¥' + JAIL_BAIL + ' 出狱');
     const d1 = 1 + Math.floor(Math.random() * 6);
     const d2 = 1 + Math.floor(Math.random() * 6);
+    this._moveAndResolve(cur, ps, d1, d2, cur.name + ' 出狱后掷出 ' + d1 + '+' + d2);
+    return { ok: true };
+  }
+
+  // 使用出狱卡出狱
+  useJailCard(playerId) {
+    if (!this.state) return { error: '游戏未开始' };
+    const ps = this.state.players;
+    const cur = ps[this.state.current];
+    if (cur.id !== playerId) return { error: '还没轮到你' };
+    if (this.state.phase !== 'rolling') return { error: '当前阶段不能操作' };
+    if (!cur.inJail) return { error: '你不在监狱' };
+    if ((cur.outOfJailCards || 0) <= 0) return { error: '没有出狱卡' };
+
+    cur.outOfJailCards--;
+    cur.inJail = false;
+    cur.jailedTurns = 0;
+    this.addLog(cur.name + ' 使用出狱卡出狱');
+    const d1 = 1 + Math.floor(Math.random() * 6);
+    const d2 = 1 + Math.floor(Math.random() * 6);
+    this._moveAndResolve(cur, ps, d1, d2, cur.name + ' 出狱后掷出 ' + d1 + '+' + d2);
+    return { ok: true };
+  }
+
+  // 掷骰后移动并结算（rollDice / payBail / useJailCard 共用）
+  _moveAndResolve(cur, ps, d1, d2, logMsg) {
     const steps = d1 + d2;
     const from = cur.position;
     let to = from + steps;
@@ -148,12 +209,12 @@ export class GameRoom {
     cur.position = to;
 
     const tile = TILES[to];
-    let logMsg = cur.name + ' 掷出 ' + d1 + '+' + d2 + '，走到「' + tile.name + '」';
     if (passedGo) logMsg += '，经过起点 +¥' + PASS_GO_BONUS;
+    logMsg += '，走到「' + tile.name + '」';
 
     let phase = 'after_move';
     let pendingTile = null;
-    let creditor = null; // 欠款债主：null 表示银行
+    let creditor = null;
 
     if (tile.type === 'property' || tile.type === 'railroad' || tile.type === 'utility') {
       const ownerId = this.state.tileOwners[to];
@@ -203,7 +264,6 @@ export class GameRoom {
     }
 
     this.broadcastState();
-    return { ok: true };
   }
 
   // 购买当前地产
@@ -473,6 +533,65 @@ export class GameRoom {
     this.state.pendingTile = null;
     this.state.dice = null;
     this.state.lastMove = null;
+
+    const next = this.state.players[this.state.current];
+    if (next && next.isAI && !next.bankrupt && this.state.phase !== 'gameOver') {
+      this._scheduleAI(next.id);
+    }
+  }
+
+  // 添加机器人玩家
+  addAI(playerId) {
+    const host = this.players.get(playerId);
+    if (!host || !host.isHost) return { error: '只有房主可以添加机器人' };
+    if (this.started) return { error: '游戏已开始' };
+    if (this.players.size >= MAX_PLAYERS) return { error: '房间已满（最多8人）' };
+
+    const cleanName = '机器人' + (this.players.size + 1);
+    const used = new Set([...this.players.values()].map(p => p.color));
+    const color = PLAYER_COLORS.find(c => !used.has(c)) || PLAYER_COLORS[0];
+    const id = uid();
+    const player = { ws: null, id, name: cleanName, color, isHost: this.players.size === 0, isAI: true };
+    this.players.set(id, player);
+    this.broadcastPlayerList();
+    return { ok: true };
+  }
+
+  _scheduleAI(playerId) {
+    if (this._aiTimer) clearTimeout(this._aiTimer);
+    this._aiTimer = setTimeout(() => {
+      this._aiTimer = null;
+      this._aiAct(playerId);
+    }, 1600);
+  }
+
+  _aiAct(playerId) {
+    if (!this.state || this.state.phase === 'gameOver') return;
+    const ps = this.state.players;
+    const cur = ps[this.state.current];
+    if (!cur || cur.id !== playerId || !cur.isAI || cur.bankrupt) return;
+
+    if (this.state.phase === 'rolling') {
+      if (cur.inJail) {
+        if ((cur.outOfJailCards || 0) > 0) this.useJailCard(playerId);
+        else if (cur.money >= JAIL_BAIL) this.payBail(playerId);
+        else this.rollDice(playerId);
+      } else {
+        this.rollDice(playerId);
+      }
+      // 掷骰后若仍轮到该 AI，继续下一步（购买 / 结束回合 / 再来一次）
+      const n = this.state.players[this.state.current];
+      if (this.state.phase !== 'gameOver' && n && n.id === playerId && n.isAI && !n.bankrupt) {
+        this._scheduleAI(playerId);
+      }
+    } else if (this.state.phase === 'buying') {
+      const t = TILES[this.state.pendingTile];
+      const price = getPropertyPrice(t);
+      if (cur.money >= price) this.buyProperty(playerId);
+      else this.skipBuy(playerId);
+    } else if (this.state.phase === 'after_move') {
+      this.endTurn(playerId);
+    }
   }
 
   mortgageProperty(playerId, tileId) {
@@ -745,7 +864,7 @@ export class GameRoom {
 
   broadcastPlayerList() {
     const players = [...this.players.values()].map(p => ({
-      id: p.id, name: p.name, color: p.color, isHost: p.isHost,
+      id: p.id, name: p.name, color: p.color, isHost: p.isHost, isAI: !!p.isAI,
     }));
     this.broadcast(JSON.stringify({
       type: 'player_list', players,

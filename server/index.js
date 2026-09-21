@@ -46,21 +46,30 @@ const httpServer = createServer((req, res) => {
 });
 
 const wss = new WebSocketServer({ server: httpServer });
-const room = new GameRoom();
+// 多房间：按房间码路由到独立 GameRoom
+const rooms = new Map();
+function getRoom(code) {
+  const key = String(code || '').trim().toUpperCase() || '大厅';
+  if (!rooms.has(key)) rooms.set(key, new GameRoom());
+  return rooms.get(key);
+}
 
 wss.on('connection', (ws) => {
   let playerId = null;
   let isSpectator = false;
+  let room = null;
+  const sendError = (m) => { try { ws.send(JSON.stringify({ type: 'error', message: m })); } catch {} };
 
   ws.on('message', (data) => {
     let msg;
     try { msg = JSON.parse(data.toString()); }
-    catch { room.sendError(ws, '消息格式错误'); return; }
+    catch { sendError('消息格式错误'); return; }
 
     if (msg.type === 'join') {
       if (playerId) return;
+      room = getRoom(msg.roomCode);
       const result = room.addPlayer(ws, msg.name, msg.playerId);
-      console.log('[加入] ' + (msg.name || '(空)') + ' -> ' +
+      console.log('[加入] ' + (msg.name || '(空)') + ' 房间=' + (String(msg.roomCode || '').trim().toUpperCase() || '大厅') + ' -> ' +
         (result.error ? ('拒绝: ' + result.error) : (result.spectator ? '旁观' : '成功 id=' + result.id)));
       if (result.error) { room.sendError(ws, result.error); ws.close(); return; }
 
@@ -72,15 +81,19 @@ wss.on('connection', (ws) => {
         return;
       }
       ws.send(JSON.stringify({ type: 'welcome', playerId: result.id, player: result.player }));
-      // 重连的玩家：补发当前游戏状态，让前端直接进入对局
       if (room.state) ws.send(JSON.stringify({ type: 'game_state', state: room.state }));
       return;
     }
 
-    if (!playerId) { room.sendError(ws, '请先加入房间'); return; }
-    if (isSpectator) return;  // 旁观者不能操作
+    if (!playerId) { sendError('请先加入房间'); return; }
+    if (isSpectator) return;
 
     switch (msg.type) {
+      case 'add_ai': {
+        const r = room.addAI(playerId);
+        if (r.error) room.sendError(ws, r.error);
+        break;
+      }
       case 'start_game': {
         const r = room.startGame(playerId);
         console.log('[开局] ' + playerId + ' -> ' + (r.error ? ('拒绝: ' + r.error) : '成功'));
@@ -142,6 +155,16 @@ wss.on('connection', (ws) => {
         if (r.error) room.sendError(ws, r.error);
         break;
       }
+      case 'pay_bail': {
+        const r = room.payBail(playerId);
+        if (r.error) room.sendError(ws, r.error);
+        break;
+      }
+      case 'use_jail_card': {
+        const r = room.useJailCard(playerId);
+        if (r.error) room.sendError(ws, r.error);
+        break;
+      }
       case 'end_turn': {
         const r = room.endTurn(playerId);
         if (r.error) room.sendError(ws, r.error);
@@ -159,7 +182,7 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
-    if (!playerId) return;
+    if (!playerId || !room) return;
     if (isSpectator) room.removeSpectator(playerId);
     else room.removePlayer(playerId);
   });

@@ -15,9 +15,11 @@ const ws = new WebSocket(`${proto}//${location.host}`);
 
 const $ = (id) => document.getElementById(id);
 const lobby = $('lobby'), game = $('game');
-const nameInput = $('name-input'), joinBtn = $('join-btn'), startBtn = $('start-btn'), lobbyBtn = $('lobby-btn');
+const nameInput = $('name-input'), roomInput = $('room-input'), joinBtn = $('join-btn'), startBtn = $('start-btn'), lobbyBtn = $('lobby-btn');
+const addAiBtn = $('add-ai-btn');
 const rollBtn = $('roll-btn'), buyBtn = $('buy-btn'), skipBuyBtn = $('skip-buy-btn'), endTurnBtn = $('end-turn-btn');
 const buildBtn = $('build-btn'), mortgageBtn = $('mortgage-btn'), tradeBtn = $('trade-btn');
+const bailBtn = $('bail-btn'), jailcardBtn = $('jailcard-btn');
 const buildPanel = $('build-panel'), mortgagePanel = $('mortgage-panel'), tradePanel = $('trade-panel'), tradeOffer = $('trade-offer'), auctionPanel = $('auction-panel');
 const waitingTip = $('waiting-tip'), diceDisplay = $('dice-display');
 const lobbyMsg = $('lobby-msg'), playerList = $('player-list'), playerCount = $('player-count');
@@ -41,10 +43,12 @@ let cardTimer = null;
   const savedId = sessionStorage.getItem('monopoly_player_id');
   const savedName = sessionStorage.getItem('monopoly_player_name');
   if (!savedId || !savedName) return;
+  const savedRoom = sessionStorage.getItem('monopoly_room') || '';
   nameInput.value = savedName;
+  if (roomInput) roomInput.value = savedRoom;
   const send = () => {
     gotError = false;
-    ws.send(JSON.stringify({ type: 'join', name: savedName, playerId: savedId }));
+    ws.send(JSON.stringify({ type: 'join', name: savedName, playerId: savedId, roomCode: savedRoom }));
     joinBtn.disabled = true;
     setMsg('正在重连...');
   };
@@ -56,12 +60,15 @@ let cardTimer = null;
 joinBtn.addEventListener('click', () => {
   const name = nameInput.value.trim();
   if (!name) { setMsg('请输入昵称', true); return; }
+  const roomCode = roomInput.value.trim();
+  sessionStorage.setItem('monopoly_room', roomCode);
   gotError = false;
-  ws.send(JSON.stringify({ type: 'join', name, playerId: sessionStorage.getItem('monopoly_player_id') || undefined }));
+  ws.send(JSON.stringify({ type: 'join', name, playerId: sessionStorage.getItem('monopoly_player_id') || undefined, roomCode }));
   joinBtn.disabled = true;
   setMsg('正在加入...');
 });
 startBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'start_game' })));
+addAiBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'add_ai' })));
 lobbyBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'back_to_lobby' })));
 
 // 点击棋盘格子查看地契
@@ -69,6 +76,8 @@ onTileClick((id) => { if (state) renderDeed(id); });
 deedClose.addEventListener('click', () => deedModal.classList.add('hidden'));
 deedModal.addEventListener('click', (e) => { if (e.target === deedModal) deedModal.classList.add('hidden'); });
 rollBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'roll_dice' })));
+bailBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'pay_bail' })));
+jailcardBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'use_jail_card' })));
 buyBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'buy_property' })));
 skipBuyBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'skip_buy' })));
 endTurnBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'end_turn' })));
@@ -165,7 +174,7 @@ function backToLobby() {
 
 // ---------- 操作按钮 ----------
 function hideAllActions() {
-  [rollBtn, buyBtn, skipBuyBtn, endTurnBtn, buildBtn, mortgageBtn, tradeBtn].forEach(b => b.classList.add('hidden'));
+  [rollBtn, buyBtn, skipBuyBtn, endTurnBtn, buildBtn, mortgageBtn, tradeBtn, bailBtn, jailcardBtn].forEach(b => b.classList.add('hidden'));
   [buildPanel, mortgagePanel, auctionPanel].forEach(p => p.classList.add('hidden'));
   waitingTip.classList.add('hidden');
 }
@@ -181,6 +190,16 @@ function updateActions() {
   if (!myTurn) { waitingTip.classList.remove('hidden'); return; }
 
   if (state.phase === 'rolling') {
+    const me = state.players.find(p => p.id === myId);
+    if (me && me.inJail) {
+      rollBtn.textContent = '🎲 掷骰子（双数出狱）';
+      rollBtn.classList.remove('hidden');
+      if (me.money >= 50) bailBtn.classList.remove('hidden');
+      if ((me.outOfJailCards || 0) > 0) jailcardBtn.classList.remove('hidden');
+      tradeBtn.classList.remove('hidden');
+      return;
+    }
+    rollBtn.textContent = '🎲 掷骰子';
     rollBtn.classList.remove('hidden');
     if (getBuildableTiles().length > 0) buildBtn.classList.remove('hidden');
     mortgageBtn.classList.remove('hidden');
@@ -523,9 +542,10 @@ function renderPlayers() {
   playerList.innerHTML = '';
   gamePlayerList.innerHTML = '';
   const curId = state ? state.players[state.current].id : null;
+  addAiBtn.classList.toggle('hidden', !myIsHost);
   players.forEach((p) => {
     const li = document.createElement('li');
-    li.innerHTML = `<span class="dot" style="background:${p.color}"></span><span class="p-name">${escapeHtml(p.name)}</span>${p.isHost ? '<span class="tag">房主</span>' : ''}${p.id === myId ? '<span class="tag me">我</span>' : ''}`;
+    li.innerHTML = `<span class="dot" style="background:${p.color}"></span><span class="p-name">${escapeHtml(p.name)}</span>${p.isHost ? '<span class="tag">房主</span>' : ''}${p.isAI ? '<span class="tag">机器人</span>' : ''}${p.id === myId ? '<span class="tag me">我</span>' : ''}`;
     playerList.appendChild(li);
     const sp = state ? state.players.find(s => s.id === p.id) : null;
     const isCur = p.id === curId;

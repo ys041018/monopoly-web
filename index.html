@@ -15,6 +15,7 @@
 
       <div class="join-row">
         <input id="name-input" type="text" maxlength="12" placeholder="输入昵称">
+        <input id="room-input" type="text" maxlength="6" placeholder="房间码(可留空)">
         <button id="join-btn" class="btn primary">加入房间</button>
       </div>
 
@@ -26,6 +27,7 @@
         <ul id="player-list" class="player-list"></ul>
       </div>
 
+      <button id="add-ai-btn" class="btn ghost hidden">🤖 添加机器人</button>
       <button id="start-btn" class="btn start" disabled>开始游戏</button>
       <p id="lobby-msg" class="msg"></p>
     </div>
@@ -47,6 +49,8 @@
         <div class="side-card">
           <div class="action-btns">
             <button id="roll-btn" class="btn primary big hidden">🎲 掷骰子</button>
+            <button id="bail-btn" class="btn start hidden">💰 付 ¥50 出狱</button>
+            <button id="jailcard-btn" class="btn ghost hidden">🃏 使用出狱卡</button>
             <button id="buy-btn" class="btn start big hidden">买下这块地</button>
             <button id="skip-buy-btn" class="btn ghost hidden">不买，跳过</button>
             <button id="build-btn" class="btn primary big hidden">🏗️ 盖房</button>
