@@ -247,7 +247,7 @@ setInterval(() => {
 
 function tilePrice(t) {
   if (t.type === 'railroad') return 200;
-  if (t.type === 'utility') return 150;
+  if (t.type === 'utility') return 300;
   return t.price || 0;
 }
 
@@ -670,11 +670,11 @@ function renderDeed(tileId) {
   } else if (tile.type === 'utility') {
     html += '<div class="deed-band" style="background:#90A4AE"></div>';
     html += '<div class="deed-title">' + tile.name + '（公共事业）</div>';
-    html += '<div class="deed-note">地价 ¥150</div>';
+    html += '<div class="deed-note">地价 ¥300</div>';
     if (owner) html += '<div class="deed-owner" style="background:' + owner.color + '33;color:' + owner.color + '">👤 ' + owner.name + ' 持有</div>';
     html += '<div class="deed-title" style="font-size:15px;margin-top:4px">过路费（按骰点 × 倍数）</div>';
-    html += '<div class="deed-row"><span class="k">持有 1 个</span><span class="v">骰点 ×4</span></div>';
-    html += '<div class="deed-row"><span class="k">持有 2 个</span><span class="v">骰点 ×10</span></div>';
+    html += '<div class="deed-row"><span class="k">持有 1 个</span><span class="v">骰点 ×15</span></div>';
+    html += '<div class="deed-row"><span class="k">持有 2 个</span><span class="v">骰点 ×40</span></div>';
     html += '<div class="deed-row"><span class="k">抵押价</span><span class="v">¥75</span></div>';
     html += '<div class="deed-row"><span class="k">赎回价</span><span class="v">¥83</span></div>';
   } else {
