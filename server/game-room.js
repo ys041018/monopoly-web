@@ -68,6 +68,8 @@ export class GameRoom {
     this.players.delete(playerId);
 
     if (this.started && this.state) {
+      const sp = this.state.players.find(p => p.id === playerId);
+      if (sp && !sp.bankrupt) { sp.bankrupt = true; this.addLog(sp.name + ' 掉线退出'); }
       const online = [...this.players.values()].filter(p => p.isAI || (p.ws && p.ws.readyState === 1)).length;
       if (online < MIN_PLAYERS) {
         console.log('[自动结束] 在线人数不足，游戏回到大厅');
@@ -528,6 +530,8 @@ export class GameRoom {
       const p = this.state.players[this.state.current];
       if (p.rest) { p.rest = false; continue; }
       if (p.bankrupt) continue;
+      const conn = this.players.get(p.id);
+      if (conn && !conn.isAI && (!conn.ws || conn.ws.readyState !== 1)) continue;
       break;
     } while (guard++ < n * 2);
 
