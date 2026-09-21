@@ -248,7 +248,7 @@ export class GameRoom {
       const card = deck[Math.floor(Math.random() * deck.length)];
       logMsg += '，抽到【' + card.text + '】';
       this.applyCard(cur, ps, card);
-      this.state.lastCard = { type: tile.type, text: card.text };
+      this.state.lastCard = { type: tile.type, text: card.text, seq: (this.state.lastCard && this.state.lastCard.seq || 0) + 1 };
     } else if (tile.type === 'event') {
       const r = this.applyEvent(cur, ps, tile);
       logMsg += '，' + r.text;

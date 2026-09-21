@@ -36,7 +36,7 @@ let myId = null, myIsHost = false, isSpectator = false;
 if (localStorage.getItem('monopoly_sound') === '0') { setSoundEnabled(false); }
 let players = [], state = null;
 let gotError = false, entered = false, animating = false;
-let prevLogLength = 0;
+let lastSoundLog = null;
 let lastLogText = null;
 let prevLastCard = null;
 let cardTimer = null;
@@ -149,7 +149,7 @@ function enterGame() {
   lobby.classList.add('hidden');
   game.classList.remove('hidden');
   tradePanel.classList.add('hidden');
-  prevLogLength = state.log ? state.log.length : 0;
+  lastSoundLog = state.log && state.log.length ? state.log[state.log.length - 1] : null;
   render(state);
   refresh();
 }
@@ -704,7 +704,7 @@ function renderDeed(tileId) {
 
 function detectCard() {
   if (!state || !state.lastCard) return;
-  const key = state.lastCard.type + '|' + state.lastCard.text;
+  const key = (state.lastCard.seq || 0) + '|' + state.lastCard.type + '|' + state.lastCard.text;
   if (prevLastCard === key) return;
   prevLastCard = key;
   // 命运 / 机会播放不同特殊音效
@@ -724,10 +724,17 @@ function showCard(card) {
 
 function detectSound() {
   if (!state || !state.log) return;
-  if (state.log.length <= prevLogLength) return;
-  const newLogs = state.log.slice(prevLogLength);
-  prevLogLength = state.log.length;
-  newLogs.forEach((l) => playForLog(l));
+  const all = state.log;
+  if (lastSoundLog == null || !all.includes(lastSoundLog)) {
+    lastSoundLog = all[all.length - 1] || null;
+    return;
+  }
+  const idx = all.lastIndexOf(lastSoundLog);
+  const newLogs = all.slice(idx + 1);
+  if (newLogs.length > 0) {
+    newLogs.forEach((l) => playForLog(l));
+    lastSoundLog = all[all.length - 1] || null;
+  }
 }
 
 const tileColorMap = new Map();
