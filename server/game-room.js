@@ -11,6 +11,7 @@ import { TILES, BOARD_SIZE } from '../js/data/tiles.js';
 import { CHANCE_CARDS, CHEST_CARDS } from '../js/data/cards.js';
 
 const PLAYER_COLORS = ['#EF5350', '#FF9800', '#FDD835', '#66BB6A', '#4FC3F7', '#AB47BC', '#26C6DA', '#EC407A'];
+const TURN_TIMEOUT = 45000; // 回合倒计时（毫秒）
 
 function uid() { return Math.random().toString(36).slice(2, 10); }
 
@@ -21,6 +22,7 @@ export class GameRoom {
     this.started = false;
     this.state = null;
     this._auctionTimer = null;
+    this._turnTimer = null;
   }
 
   addPlayer(ws, name, playerId) {
@@ -109,6 +111,7 @@ export class GameRoom {
       lastCard: null,
       pendingTile: null,
       lastMove: null,
+      turnDeadline: null,
       log: ['游戏开始！'],
     };
 
@@ -263,6 +266,7 @@ export class GameRoom {
       this.state.pendingTile = pendingTile;
     }
 
+    this._resetTurnTimer();
     this.broadcastState();
   }
 
@@ -533,6 +537,7 @@ export class GameRoom {
     this.state.pendingTile = null;
     this.state.dice = null;
     this.state.lastMove = null;
+    this._resetTurnTimer();
 
     const next = this.state.players[this.state.current];
     if (next && next.isAI && !next.bankrupt && this.state.phase !== 'gameOver') {
@@ -555,6 +560,27 @@ export class GameRoom {
     this.players.set(id, player);
     this.broadcastPlayerList();
     return { ok: true };
+  }
+
+  _resetTurnTimer() {
+    if (this._turnTimer) { clearTimeout(this._turnTimer); this._turnTimer = null; }
+    if (!this.state || this.state.phase === 'gameOver' || this.state.phase === 'auction') {
+      if (this.state) this.state.turnDeadline = null;
+      return;
+    }
+    const cur = this.state.players[this.state.current];
+    if (!cur || cur.bankrupt || cur.isAI) { this.state.turnDeadline = null; return; }
+    this.state.turnDeadline = Date.now() + TURN_TIMEOUT;
+    this._turnTimer = setTimeout(() => { this._turnTimer = null; this._onTurnTimeout(); }, TURN_TIMEOUT);
+  }
+
+  _onTurnTimeout() {
+    if (!this.state || this.state.phase === 'gameOver' || this.state.phase === 'auction') return;
+    const cur = this.state.players[this.state.current];
+    if (!cur || cur.bankrupt || cur.isAI) return;
+    if (this.state.phase === 'rolling') this.rollDice(cur.id);
+    else if (this.state.phase === 'buying') this.skipBuy(cur.id);
+    else if (this.state.phase === 'after_move') this.endTurn(cur.id);
   }
 
   _scheduleAI(playerId) {
@@ -847,6 +873,7 @@ export class GameRoom {
 
   resetToLobby() {
     if (this._auctionTimer) { clearTimeout(this._auctionTimer); this._auctionTimer = null; }
+    if (this._turnTimer) { clearTimeout(this._turnTimer); this._turnTimer = null; }
     this.players.forEach((p) => { if (p._discTimer) { clearTimeout(p._discTimer); p._discTimer = null; } });
     this.started = false;
     this.state = null;

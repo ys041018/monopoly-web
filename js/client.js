@@ -579,8 +579,22 @@ function updateTurnInfo() {
   const me = state.players.find(p => p.id === myId);
   turnTitle.textContent = cur.id === myId ? '轮到你行动！' : ('轮到 ' + cur.name);
   turnTitle.style.color = cur.color;
-  turnSub.textContent = '第 ' + state.round + ' 回合 · 你的资金 ¥' + (me ? me.money : 0);
+  updateTurnTimer();
 }
+
+function updateTurnTimer() {
+  if (!state || state.phase === 'gameOver' || isSpectator) return;
+  const me = state.players.find(p => p.id === myId);
+  const base = '第 ' + state.round + ' 回合 · 你的资金 ¥' + (me ? me.money : 0);
+  if (state.turnDeadline) {
+    const remain = Math.max(0, Math.ceil((state.turnDeadline - Date.now()) / 1000));
+    const isMe = state.players[state.current] && state.players[state.current].id === myId;
+    turnSub.textContent = base + (isMe ? ' · ⏳ 倒计时 ' + remain + ' 秒' : ' · ⏳ 对方剩余 ' + remain + ' 秒');
+  } else {
+    turnSub.textContent = base;
+  }
+}
+setInterval(updateTurnTimer, 500);
 
 function renderDice() {
   diceDisplay.textContent = state && state.dice ? state.dice.map(d => DICE_FACES[d - 1]).join(' ') : '';
