@@ -48,16 +48,23 @@ const httpServer = createServer((req, res) => {
 const wss = new WebSocketServer({ server: httpServer });
 // 多房间：按房间码路由到独立 GameRoom
 const rooms = new Map();
+function genCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code;
+  do { code = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join(''); }
+  while (rooms.has(code));
+  return code;
+}
 function getRoom(code) {
-  const key = String(code || '').trim().toUpperCase() || '大厅';
-  if (!rooms.has(key)) rooms.set(key, new GameRoom());
-  return rooms.get(key);
+  const key = String(code || '').trim().toUpperCase();
+  return rooms.get(key) || null;
 }
 
 wss.on('connection', (ws) => {
   let playerId = null;
   let isSpectator = false;
   let room = null;
+  let roomCode = null;
   const sendError = (m) => { try { ws.send(JSON.stringify({ type: 'error', message: m })); } catch {} };
 
   ws.on('message', (data) => {
@@ -68,6 +75,8 @@ wss.on('connection', (ws) => {
     if (msg.type === 'join') {
       if (playerId) return;
       room = getRoom(msg.roomCode);
+      if (!room) { sendError('房间不存在，请检查房间码'); return; }
+      roomCode = String(msg.roomCode || '').trim().toUpperCase();
       const result = room.addPlayer(ws, msg.name, msg.playerId);
       console.log('[加入] ' + (msg.name || '(空)') + ' 房间=' + (String(msg.roomCode || '').trim().toUpperCase() || '大厅') + ' -> ' +
         (result.error ? ('拒绝: ' + result.error) : (result.spectator ? '旁观' : '成功 id=' + result.id)));
@@ -89,6 +98,12 @@ wss.on('connection', (ws) => {
     if (isSpectator) return;
 
     switch (msg.type) {
+      case 'create_room': {
+        const code = genCode();
+        rooms.set(code, new GameRoom());
+        ws.send(JSON.stringify({ type: 'room_created', roomCode: code }));
+        break;
+      }
       case 'add_ai': {
         const r = room.addAI(playerId);
         if (r.error) room.sendError(ws, r.error);
@@ -185,6 +200,7 @@ wss.on('connection', (ws) => {
     if (!playerId || !room) return;
     if (isSpectator) room.removeSpectator(playerId);
     else room.removePlayer(playerId);
+    if (room.players.size === 0 && !room.started && roomCode) rooms.delete(roomCode);
   });
   ws.on('error', () => {});
 });

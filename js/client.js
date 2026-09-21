@@ -17,6 +17,7 @@ const $ = (id) => document.getElementById(id);
 const lobby = $('lobby'), game = $('game');
 const nameInput = $('name-input'), roomInput = $('room-input'), joinBtn = $('join-btn'), startBtn = $('start-btn'), lobbyBtn = $('lobby-btn');
 const addAiBtn = $('add-ai-btn');
+const createRoomBtn = $('create-room-btn');
 const soundToggle = $('sound-toggle'), copyRoomBtn = $('copy-room-btn');
 const rollBtn = $('roll-btn'), buyBtn = $('buy-btn'), skipBuyBtn = $('skip-buy-btn'), endTurnBtn = $('end-turn-btn');
 const buildBtn = $('build-btn'), mortgageBtn = $('mortgage-btn'), tradeBtn = $('trade-btn');
@@ -71,6 +72,11 @@ joinBtn.addEventListener('click', () => {
 });
 startBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'start_game' })));
 addAiBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'add_ai' })));
+createRoomBtn.addEventListener('click', () => {
+  const name = nameInput.value.trim();
+  if (!name) { setMsg('请先输入昵称', true); return; }
+  ws.send(JSON.stringify({ type: 'create_room' }));
+});
 soundToggle.addEventListener('click', () => { const on = !isSoundEnabled(); setSoundEnabled(on); soundToggle.textContent = on ? '🔊' : '🔇'; localStorage.setItem('monopoly_sound', on ? '1' : '0'); });
 copyRoomBtn.addEventListener('click', async () => { try { await navigator.clipboard.writeText(roomInput.value.trim()); copyRoomBtn.textContent = '已复制'; setTimeout(() => copyRoomBtn.textContent = '复制', 1200); } catch {} });
 lobbyBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'back_to_lobby' })));
@@ -110,6 +116,14 @@ ws.onmessage = (e) => {
         sessionStorage.removeItem('monopoly_player_id');
         sessionStorage.removeItem('monopoly_player_name');
       }
+      break;
+    case 'room_created':
+      sessionStorage.setItem('monopoly_room', msg.roomCode);
+      roomInput.value = msg.roomCode;
+      gotError = false;
+      ws.send(JSON.stringify({ type: 'join', name: nameInput.value.trim(), roomCode: msg.roomCode }));
+      joinBtn.disabled = true;
+      setMsg('已创建房间 ' + msg.roomCode + '，正在加入...');
       break;
     case 'player_list':
       players = msg.players;
