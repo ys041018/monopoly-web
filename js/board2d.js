@@ -152,6 +152,7 @@ function drawProperty(id, tile, r, vertical, corner, state) {
     // 归属徽章：玩家色圆形 + 玩家序号，放在卡片右上角
     drawOwnerBadge(owner, x + w - 12, y + 12, 22, state.players.indexOf(owner) + 1);
   }
+  if (state && state.tileMortgaged[id]) drawMortgageTag(r.x + r.w / 2, r.y + r.h / 2, Math.min(r.w, r.h) * 0.72);
 }
 
 function drawSpecial(id, tile, r, vertical, corner, state) {
@@ -192,6 +193,7 @@ function drawSpecial(id, tile, r, vertical, corner, state) {
     const owner = state.players.find(p => p.id === ownerId);
     if (owner) drawOwnerBadge(owner, x + w - 12, y + 12, 22, state.players.indexOf(owner) + 1);
   }
+  if (state && state.tileMortgaged[id]) drawMortgageTag(r.x + r.w / 2, r.y + r.h / 2, Math.min(r.w, r.h) * 0.72);
 }
 
 function drawCenter(state) {
@@ -541,6 +543,18 @@ function drawHotel(cx, cy, s) {
   // 高光
   ctx.fillStyle = 'rgba(255,255,255,0.28)';
   ctx.fillRect(x + 1.5, y + h * 0.2, w * 0.28, h * 0.3);
+}
+
+function drawMortgageTag(cx, cy, size) {
+  const w = size, h = size * 0.4;
+  ctx.fillStyle = 'rgba(20, 24, 28, 0.72)';
+  roundRect(cx - w / 2, cy - h / 2, w, h, 8);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+  ctx.lineWidth = 1.5;
+  roundRect(cx - w / 2, cy - h / 2, w, h, 8);
+  ctx.stroke();
+  drawText('已抵押', cx, cy + 0.5, Math.max(10, Math.round(h * 0.55)), '#ffffff', 'center', 'bold');
 }
 
 function drawOwnerBadge(owner, cx, cy, size, label) {
