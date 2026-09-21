@@ -13,7 +13,7 @@ export const MIN_PLAYERS = 2;
 export const DEFAULT_MAX_ROUNDS = 60;
 
 export const RAILROAD_RENT = [25, 50, 100, 200];  // 按持有车站数
-export const UTILITY_MULT = [4, 10];              // 持有1个/2个公共事业时乘骰点
+export const UTILITY_MULT = [6, 15];              // 持有1个/2个公共事业时乘骰点
 export const MAX_HOUSES = 4;                      // 每块地最多 4 房
 export const HOTEL_LEVEL = 5;                     // level 5 = 旅馆
 export const MORTGAGE_RATE = 0.5;                 // 抵押按半价
