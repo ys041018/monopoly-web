@@ -8,7 +8,7 @@ window.addEventListener('error', (e) => {
   if (t) t.textContent = '⚠️ ' + (e.message || '未知错误') + ' @ ' + (e.filename||'').split('/').pop() + ':' + e.lineno;
 });
 import { TILES, GROUPS } from './data/tiles.js';
-import { playForLog, play } from './sound.js';
+import { playForLog, play, setSoundEnabled, isSoundEnabled } from './sound.js';
 
 const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
 const ws = new WebSocket(`${proto}//${location.host}`);
@@ -17,6 +17,7 @@ const $ = (id) => document.getElementById(id);
 const lobby = $('lobby'), game = $('game');
 const nameInput = $('name-input'), roomInput = $('room-input'), joinBtn = $('join-btn'), startBtn = $('start-btn'), lobbyBtn = $('lobby-btn');
 const addAiBtn = $('add-ai-btn');
+const soundToggle = $('sound-toggle'), copyRoomBtn = $('copy-room-btn');
 const rollBtn = $('roll-btn'), buyBtn = $('buy-btn'), skipBuyBtn = $('skip-buy-btn'), endTurnBtn = $('end-turn-btn');
 const buildBtn = $('build-btn'), mortgageBtn = $('mortgage-btn'), tradeBtn = $('trade-btn');
 const bailBtn = $('bail-btn'), jailcardBtn = $('jailcard-btn');
@@ -31,6 +32,7 @@ const cardPopup = $('card-popup'), cardPopupTitle = $('card-popup-title'), cardP
 const DICE_FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
 let myId = null, myIsHost = false, isSpectator = false;
+if (localStorage.getItem('monopoly_sound') === '0') { setSoundEnabled(false); }
 let players = [], state = null;
 let gotError = false, entered = false, animating = false;
 let prevLogLength = 0;
@@ -69,6 +71,8 @@ joinBtn.addEventListener('click', () => {
 });
 startBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'start_game' })));
 addAiBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'add_ai' })));
+soundToggle.addEventListener('click', () => { const on = !isSoundEnabled(); setSoundEnabled(on); soundToggle.textContent = on ? '🔊' : '🔇'; localStorage.setItem('monopoly_sound', on ? '1' : '0'); });
+copyRoomBtn.addEventListener('click', async () => { try { await navigator.clipboard.writeText(roomInput.value.trim()); copyRoomBtn.textContent = '已复制'; setTimeout(() => copyRoomBtn.textContent = '复制', 1200); } catch {} });
 lobbyBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'back_to_lobby' })));
 
 // 点击棋盘格子查看地契
