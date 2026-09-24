@@ -169,8 +169,45 @@ export class GameRoom {
       log: ['游戏开始！'],
     };
 
+    // 快速模式：开局随机分地
+    if (fast) this._distributeProperties();
+
     this.broadcastState();
     return { ok: true };
+  }
+
+  // 快速模式开局分地：数量随人数自适应，同一人尽量不拿同色组（避免开局白送垄断）
+  _distributeProperties() {
+    const props = this.map.tiles.filter(t => t.type === 'property');
+    const players = this.state.players;
+    if (!props.length || !players.length) return 0;
+    const perPlayer = Math.max(1, Math.min(3, Math.floor(props.length / players.length / 2)));
+
+    const pool = props.slice();
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+    }
+
+    const owned = new Map(players.map(p => [p.id, new Set()]));
+    const picked = new Map(players.map(p => [p.id, []]));
+    for (let round = 0; round < perPlayer; round++) {
+      players.forEach((p) => {
+        if (!pool.length) return;
+        let idx = pool.findIndex(t => !owned.get(p.id).has(t.group));
+        if (idx < 0) idx = 0;
+        const tile = pool.splice(idx, 1)[0];
+        this.state.tileOwners[tile.id] = p.id;
+        owned.get(p.id).add(tile.group);
+        picked.get(p.id).push(tile.name);
+      });
+    }
+
+    players.forEach((p) => {
+      const names = picked.get(p.id);
+      if (names && names.length) this.addLog('【快速模式】' + p.name + ' 开局分到 ' + names.join('、'));
+    });
+    return perPlayer;
   }
 
   // 当前玩家掷骰
