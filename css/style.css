@@ -428,3 +428,25 @@ body {
 .room-settings, .room-settings[open] { display: block; }
 .room-settings summary { margin-bottom: 4px; }
 .room-settings label { margin-top: 8px; }
+
+/* ===== 装饰移出卡片，避免遮挡文字 ===== */
+.lobby-card { position: relative; }
+.lobby-card > * { position: relative; z-index: 1; }
+.lobby-card::before {
+  left: -182px;
+  bottom: 30px;
+  width: 168px;
+  height: 168px;
+  opacity: 0.8;
+  z-index: 0;
+}
+.lobby-card::after {
+  right: -156px;
+  bottom: -34px;
+  width: 214px;
+  height: 214px;
+  z-index: 0;
+}
+@media (max-width: 1280px) {
+  .lobby-card::before, .lobby-card::after { display: none; }
+}
