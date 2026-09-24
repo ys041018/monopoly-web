@@ -8,6 +8,7 @@ import { extname, join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import os from 'os';
 import { GameRoom } from './game-room.js';
+import { dbReady, findUserByUsername, createUser, createSession, findSession, deleteSession, verifyPassword } from './db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
@@ -67,10 +68,50 @@ wss.on('connection', (ws) => {
   let roomCode = null;
   const sendError = (m) => { try { ws.send(JSON.stringify({ type: 'error', message: m })); } catch {} };
 
+  const sendJSON = (o) => { try { ws.send(JSON.stringify(o)); } catch {} };
+
+  const handleAuth = async (msg) => {
+    if (!dbReady()) { sendJSON({ type: 'auth_error', message: '账号服务未配置（缺少 SUPABASE_URL / SUPABASE_KEY）' }); return; }
+    try {
+      if (msg.type === 'register') {
+        const username = String(msg.username || '').trim();
+        const password = String(msg.password || '');
+        const nickname = String(msg.nickname || '').trim() || username;
+        if (username.length < 3 || password.length < 6) { sendJSON({ type: 'auth_error', message: '用户名至少 3 位，密码至少 6 位' }); return; }
+        const exists = await findUserByUsername(username);
+        if (exists) { sendJSON({ type: 'auth_error', message: '用户名已被注册' }); return; }
+        const r = await createUser(username, password, nickname);
+        if (r.error || !r.user) { sendJSON({ type: 'auth_error', message: r.error || '注册失败' }); return; }
+        const sess = await createSession(r.user.id);
+        sendJSON({ type: 'auth_ok', token: sess.token, user: { id: r.user.id, username: r.user.username, nickname: r.user.nickname } });
+      } else if (msg.type === 'login') {
+        const user = await findUserByUsername(String(msg.username || '').trim());
+        if (!user || !verifyPassword(String(msg.password || ''), user.password_hash)) { sendJSON({ type: 'auth_error', message: '用户名或密码错误' }); return; }
+        const sess = await createSession(user.id);
+        sendJSON({ type: 'auth_ok', token: sess.token, user: { id: user.id, username: user.username, nickname: user.nickname } });
+      } else if (msg.type === 'auth') {
+        const user = await findSession(String(msg.token || ''));
+        if (!user) { sendJSON({ type: 'auth_error', message: '登录已过期' }); return; }
+        sendJSON({ type: 'auth_ok', token: msg.token, user: { id: user.id, username: user.username, nickname: user.nickname } });
+      } else if (msg.type === 'logout') {
+        await deleteSession(String(msg.token || ''));
+        sendJSON({ type: 'auth_logout' });
+      }
+    } catch (e) {
+      console.error('[auth]', e.message);
+      sendJSON({ type: 'auth_error', message: '账号服务异常' });
+    }
+  };
+
   ws.on('message', (data) => {
     let msg;
     try { msg = JSON.parse(data.toString()); }
     catch { sendError('消息格式错误'); return; }
+
+    if (msg.type === 'register' || msg.type === 'login' || msg.type === 'auth' || msg.type === 'logout') {
+      handleAuth(msg);
+      return;
+    }
 
     if (msg.type === 'join') {
       if (playerId) return;

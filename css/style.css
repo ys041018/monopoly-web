@@ -229,3 +229,11 @@ h2 { font-size: 15px; color: var(--text); }
 
 .hotkey-panel { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: rgba(0,0,0,0.04); border: 1px solid var(--card-border); font-size: 14px; }
 .hotkey-panel kbd { display: inline-block; min-width: 30px; padding: 2px 6px; margin-right: 8px; border-radius: 6px; background: #fff; border: 1px solid rgba(0,0,0,0.15); box-shadow: 0 1px 0 rgba(0,0,0,0.12); font-size: 13px; font-weight: 700; text-align: center; }
+
+.auth-panel { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 14px; background: rgba(0,0,0,0.03); border: 1px solid var(--card-border); }
+.auth-panel h2 { font-size: 13px; color: var(--muted); }
+.auth-panel input { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--card-border); background: rgba(0,0,0,0.03); color: var(--text); font-size: 14px; }
+.auth-btns { display: flex; gap: 8px; }
+.auth-btns .btn { flex: 1; padding: 10px; font-size: 14px; }
+.auth-info { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-radius: 12px; background: rgba(46,204,113,0.12); border: 1px solid rgba(46,204,113,0.35); font-size: 14px; }
+.auth-info .btn { padding: 6px 12px; font-size: 13px; }

@@ -10,3 +10,4 @@ update-*.mjs
 update8.mjs
 test-*.mjs
 _*.mjs
+.env

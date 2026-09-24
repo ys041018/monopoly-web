@@ -20,6 +20,8 @@ const lobby = $('lobby'), game = $('game');
 const nameInput = $('name-input'), roomInput = $('room-input'), joinBtn = $('join-btn'), startBtn = $('start-btn'), lobbyBtn = $('lobby-btn');
 const addAiBtn = $('add-ai-btn');
 const hotkeyBtn = $('hotkey-btn'), hotkeyPanel = $('hotkey-panel');
+const authPanel = $('auth-panel'), authInfo = $('auth-info'), authUser = $('auth-user'), authPass = $('auth-pass'), authNick = $('auth-nick'), authMsg = $('auth-msg'), authName = $('auth-name');
+const authLoginBtn = $('auth-login-btn'), authRegisterBtn = $('auth-register-btn'), authLogoutBtn = $('auth-logout-btn');
 const createRoomBtn = $('create-room-btn');
 const themeSelect = $('theme-select');
 const roomSettings = $('room-settings'), setMoney = $('set-money'), setRounds = $('set-rounds'), setHouse = $('set-house'), setMap = $('set-map');
@@ -38,6 +40,7 @@ const cardPopup = $('card-popup'), cardPopupTitle = $('card-popup-title'), cardP
 const DICE_FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
 let myId = null, myIsHost = false, isSpectator = false;
+let authToken = localStorage.getItem('monopoly_token') || null;
 if (localStorage.getItem('monopoly_sound') === '0') { setSoundEnabled(false); }
 let players = [], state = null;
 let gotError = false, entered = false, animating = false;
@@ -101,10 +104,30 @@ buildBtn.addEventListener('click', () => { toggle(buildPanel); if (!buildPanel.c
 mortgageBtn.addEventListener('click', () => { toggle(mortgagePanel); if (!mortgagePanel.classList.contains('hidden')) renderMortgagePanel(); });
 tradeBtn.addEventListener('click', () => { toggle(tradePanel); if (!tradePanel.classList.contains('hidden')) renderTradePanel(); });
 
+authLoginBtn.addEventListener('click', () => {
+  if (!authUser.value.trim() || !authPass.value) { authMsg.textContent = '请输入用户名和密码'; authMsg.className = 'msg error'; return; }
+  authMsg.textContent = '登录中...'; authMsg.className = 'msg';
+  ws.send(JSON.stringify({ type: 'login', username: authUser.value.trim(), password: authPass.value }));
+});
+authRegisterBtn.addEventListener('click', () => {
+  if (!authUser.value.trim() || !authPass.value) { authMsg.textContent = '请输入用户名和密码'; authMsg.className = 'msg error'; return; }
+  authMsg.textContent = '注册中...'; authMsg.className = 'msg';
+  ws.send(JSON.stringify({ type: 'register', username: authUser.value.trim(), password: authPass.value, nickname: authNick.value.trim() || authUser.value.trim() }));
+});
+authLogoutBtn.addEventListener('click', () => {
+  if (authToken) ws.send(JSON.stringify({ type: 'logout', token: authToken }));
+  authToken = null; localStorage.removeItem('monopoly_token');
+  authPanel.classList.remove('hidden'); authInfo.classList.add('hidden');
+  authMsg.textContent = ''; authPass.value = '';
+});
+ws.addEventListener('open', () => { if (authToken) ws.send(JSON.stringify({ type: 'auth', token: authToken })); });
+
 function toggle(el) { el.classList.toggle('hidden'); }
 hotkeyBtn.addEventListener('click', () => toggle(hotkeyPanel));
 
 [setMoney, setRounds, setHouse, setMap].forEach(el => el && el.addEventListener('change', sendSettings));
+
+if (authToken) { authPanel.classList.add('hidden'); authInfo.classList.remove('hidden'); }
 
 // ---------- 棋盘主题 ----------
 (function initTheme() {
@@ -152,6 +175,19 @@ ws.onmessage = (e) => {
       }
       renderPlayers();
       renderRoomSettings();
+      break;
+    case 'auth_ok':
+      authToken = msg.token; localStorage.setItem('monopoly_token', msg.token);
+      authPanel.classList.add('hidden'); authInfo.classList.remove('hidden');
+      authName.textContent = msg.user.nickname;
+      nameInput.value = msg.user.nickname;
+      authMsg.textContent = ''; authMsg.className = 'msg';
+      break;
+    case 'auth_error':
+      authMsg.textContent = msg.message; authMsg.className = 'msg error';
+      break;
+    case 'auth_logout':
+      authPanel.classList.remove('hidden'); authInfo.classList.add('hidden');
       break;
     case 'room_created':
       sessionStorage.setItem('monopoly_room', msg.roomCode);

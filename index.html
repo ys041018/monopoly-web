@@ -14,6 +14,22 @@
       <h1 class="logo">🎲 大富翁</h1>
       <p class="subtitle">单房间 · 2~8 人联机</p>
 
+      <div id="auth-panel" class="auth-panel">
+        <h2>账号（可选，登录后记录战绩）</h2>
+        <input id="auth-user" type="text" maxlength="20" placeholder="用户名">
+        <input id="auth-pass" type="password" maxlength="40" placeholder="密码">
+        <input id="auth-nick" type="text" maxlength="12" placeholder="昵称（注册用）">
+        <div class="auth-btns">
+          <button id="auth-login-btn" class="btn primary">登录</button>
+          <button id="auth-register-btn" class="btn ghost">注册</button>
+        </div>
+        <p id="auth-msg" class="msg"></p>
+      </div>
+      <div id="auth-info" class="auth-info hidden">
+        <span>已登录：<b id="auth-name"></b></span>
+        <button id="auth-logout-btn" class="btn ghost">退出</button>
+      </div>
+
       <div class="join-row">
         <input id="name-input" type="text" maxlength="12" placeholder="输入昵称">
       </div>
