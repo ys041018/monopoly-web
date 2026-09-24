@@ -19,6 +19,7 @@ const $ = (id) => document.getElementById(id);
 const lobby = $('lobby'), game = $('game');
 const nameInput = $('name-input'), roomInput = $('room-input'), joinBtn = $('join-btn'), startBtn = $('start-btn'), lobbyBtn = $('lobby-btn');
 const addAiBtn = $('add-ai-btn');
+const hotkeyBtn = $('hotkey-btn'), hotkeyPanel = $('hotkey-panel');
 const createRoomBtn = $('create-room-btn');
 const themeSelect = $('theme-select');
 const roomSettings = $('room-settings'), setMoney = $('set-money'), setRounds = $('set-rounds'), setHouse = $('set-house'), setMap = $('set-map');
@@ -101,6 +102,7 @@ mortgageBtn.addEventListener('click', () => { toggle(mortgagePanel); if (!mortga
 tradeBtn.addEventListener('click', () => { toggle(tradePanel); if (!tradePanel.classList.contains('hidden')) renderTradePanel(); });
 
 function toggle(el) { el.classList.toggle('hidden'); }
+hotkeyBtn.addEventListener('click', () => toggle(hotkeyPanel));
 
 [setMoney, setRounds, setHouse, setMap].forEach(el => el && el.addEventListener('change', sendSettings));
 
