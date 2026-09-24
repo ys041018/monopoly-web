@@ -285,6 +285,7 @@ function refresh() {
   updateTurnInfo();
   updateActions();
   renderTradeOffer();
+  renderStockPanel();
   detectSound();
   detectCard();
 }
