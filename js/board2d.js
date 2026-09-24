@@ -1,12 +1,20 @@
 // ============================================================
 // 2D 棋盘渲染（Canvas，清晰大字 + 归属边框 + 房子 + 移动动画）
 // ============================================================
-import { TILES, GROUPS, BOARD_SIZE } from './data/tiles.js';
+import { GROUPS } from './data/tiles.js';
+import { getMap } from './data/maps.js';
 
 const CORNER = 92;
 const EDGE = 72;
-const SIZE = CORNER * 2 + EDGE * 12;
 const GAP = 2;
+let activeMap = getMap('standard');
+let PER_SIDE = activeMap.perSide;
+let SIZE = CORNER * 2 + EDGE * PER_SIDE;
+export function setActiveMap(id) {
+  activeMap = getMap(id);
+  PER_SIDE = activeMap.perSide;
+  SIZE = CORNER * 2 + EDGE * PER_SIDE;
+}
 
 // 棋盘主题
 const BOARD_THEMES = {
@@ -43,15 +51,15 @@ let tokens = new Map();
 let diceDisplay = null;
 
 function tileRect(id) {
-  const c = CORNER, e = EDGE;
-  if (id === 0) return { x: SIZE - c, y: SIZE - c, w: c, h: c };
-  if (id >= 1 && id <= 12) { const i = id; return { x: SIZE - c - i * e, y: SIZE - c, w: e, h: c }; }
-  if (id === 13) return { x: 0, y: SIZE - c, w: c, h: c };
-  if (id >= 14 && id <= 25) { const i = id - 13; return { x: 0, y: SIZE - c - i * e, w: c, h: e }; }
-  if (id === 26) return { x: 0, y: 0, w: c, h: c };
-  if (id >= 27 && id <= 38) { const i = id - 26; return { x: c + (i - 1) * e, y: 0, w: e, h: c }; }
-  if (id === 39) return { x: SIZE - c, y: 0, w: c, h: c };
-  if (id >= 40 && id <= 51) { const i = id - 39; return { x: SIZE - c, y: c + (i - 1) * e, w: c, h: e }; }
+  const c = CORNER, e = EDGE, n = PER_SIDE, S = SIZE;
+  if (id === 0) return { x: S - c, y: S - c, w: c, h: c };
+  if (id >= 1 && id <= n) { const i = id; return { x: S - c - i * e, y: S - c, w: e, h: c }; }
+  if (id === n + 1) return { x: 0, y: S - c, w: c, h: c };
+  if (id >= n + 2 && id <= 2 * n + 1) { const i = id - (n + 1); return { x: 0, y: S - c - i * e, w: c, h: e }; }
+  if (id === 2 * n + 2) return { x: 0, y: 0, w: c, h: c };
+  if (id >= 2 * n + 3 && id <= 3 * n + 2) { const i = id - (2 * n + 2); return { x: c + (i - 1) * e, y: 0, w: e, h: c }; }
+  if (id === 3 * n + 3) return { x: S - c, y: 0, w: c, h: c };
+  if (id >= 3 * n + 4 && id <= 4 * n + 3) { const i = id - (3 * n + 3); return { x: S - c, y: c + (i - 1) * e, w: c, h: e }; }
   return { x: 0, y: 0, w: 0, h: 0 };
 }
 
@@ -77,7 +85,7 @@ export function render(state) {
   }
 
   ctx.clearRect(0, 0, SIZE, SIZE);
-  for (let i = 0; i < BOARD_SIZE; i++) drawTile(i, TILES[i], state);
+  for (let i = 0; i < activeMap.size; i++) drawTile(i, activeMap.tiles[i], state);
   drawCenter(state);
   if (state) { updateTokens(state.players); drawTokens(); }
 }
@@ -287,7 +295,7 @@ function drawDice(cx, cy, size, value) {
 function drawLeaderboard(state, topY) {
   const assets = state.players.map((p) => {
     let value = p.money;
-    TILES.forEach((t) => {
+    activeMap.tiles.forEach((t) => {
       if (state.tileOwners[t.id] === p.id) {
         value += (t.type === 'railroad' ? 200 : t.type === 'utility' ? 150 : (t.price || 0));
         value += (state.tileHouses[t.id] || 0) * (GROUPS[t.group] ? GROUPS[t.group].houseCost : 100);
@@ -394,7 +402,7 @@ function bindTileClick() {
     const scale = SIZE / rect.width;
     const x = (e.clientX - rect.left) * scale;
     const y = (e.clientY - rect.top) * scale;
-    for (let i = 0; i < BOARD_SIZE; i++) {
+    for (let i = 0; i < activeMap.size; i++) {
       const r = tileRect(i);
       if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) {
         tileClickCallback(i);
@@ -431,7 +439,7 @@ export function animateMove(playerId, from, to, onDone) {
     const r = tileRect(i);
     points.push({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
     if (i === to) break;
-    i = (i + 1) % BOARD_SIZE;
+    i = (i + 1) % activeMap.size;
   }
   const t = tokens.get(playerId);
   if (!t || points.length <= 1) { if (onDone) onDone(); return; }

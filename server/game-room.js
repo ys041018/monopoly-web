@@ -4,10 +4,10 @@
 // ============================================================
 import {
   START_MONEY, MAX_PLAYERS, MIN_PLAYERS, PASS_GO_BONUS,
-  JAIL_TILE_ID, GOTO_JAIL_TILE_ID, JAIL_BAIL,
+  JAIL_BAIL,
   calcPropertyRent, calcRailroadRent, calcUtilityRent, getPropertyPrice, getHouseCost, HOTEL_LEVEL, DEFAULT_MAX_ROUNDS,
 } from './rules.js';
-import { TILES, BOARD_SIZE } from '../js/data/tiles.js';
+import { getMap } from '../js/data/maps.js';
 import { CHANCE_CARDS, CHEST_CARDS } from '../js/data/cards.js';
 
 const PLAYER_COLORS = ['#EF5350', '#FF9800', '#FDD835', '#66BB6A', '#4FC3F7', '#AB47BC', '#26C6DA', '#EC407A'];
@@ -23,7 +23,8 @@ export class GameRoom {
     this.state = null;
     this._auctionTimer = null;
     this._turnTimer = null;
-    this.settings = { startMoney: START_MONEY, maxRounds: DEFAULT_MAX_ROUNDS, houseMultiplier: 1 };
+    this.settings = { startMoney: START_MONEY, maxRounds: DEFAULT_MAX_ROUNDS, houseMultiplier: 1, mapId: 'standard' };
+    this.map = getMap(this.settings.mapId);
   }
 
   updateSettings(playerId, settings) {
@@ -34,6 +35,8 @@ export class GameRoom {
     if (v.startMoney != null) this.settings.startMoney = Math.max(500, Math.min(10000, Math.floor(Number(v.startMoney)) || START_MONEY));
     if (v.maxRounds != null) this.settings.maxRounds = Math.max(10, Math.min(200, Math.floor(Number(v.maxRounds)) || DEFAULT_MAX_ROUNDS));
     if (v.houseMultiplier != null) this.settings.houseMultiplier = Math.max(0.5, Math.min(3, Number(v.houseMultiplier) || 1));
+    if (v.mapId) this.settings.mapId = getMap(v.mapId).id;
+    this.map = getMap(this.settings.mapId);
     this.broadcastPlayerList();
     return { ok: true };
   }
@@ -106,6 +109,7 @@ export class GameRoom {
     if (this.started) return { error: '游戏已经开始' };
 
     this.started = true;
+    this.map = getMap(this.settings.mapId);
     const players = [...this.players.values()].map(p => ({
       id: p.id, name: p.name, color: p.color, isHost: p.isHost, isAI: !!p.isAI,
       position: 0, money: this.settings.startMoney, inJail: false, jailedTurns: 0, outOfJailCards: 0, rest: false, bankrupt: false,
@@ -129,6 +133,7 @@ export class GameRoom {
       turnDeadline: null,
       maxRounds: this.settings.maxRounds,
       houseMultiplier: this.settings.houseMultiplier,
+      mapId: this.settings.mapId,
       log: ['游戏开始！'],
     };
 
@@ -221,14 +226,14 @@ export class GameRoom {
     const from = cur.position;
     let to = from + steps;
     let passedGo = false;
-    if (to >= BOARD_SIZE) {
-      to = to % BOARD_SIZE;
+    if (to >= this.map.size) {
+      to = to % this.map.size;
       passedGo = true;
       cur.money += PASS_GO_BONUS;
     }
     cur.position = to;
 
-    const tile = TILES[to];
+    const tile = this.map.tiles[to];
     if (passedGo) logMsg += '，经过起点 +¥' + PASS_GO_BONUS;
     logMsg += '，走到「' + tile.name + '」';
 
@@ -256,7 +261,7 @@ export class GameRoom {
       cur.money -= tile.amount;
       logMsg += '，缴税 ¥' + tile.amount;
     } else if (tile.type === 'gotojail') {
-      cur.position = JAIL_TILE_ID;
+      cur.position = this.map.jailId;
       cur.inJail = true;
       cur.jailedTurns = 1;
       logMsg += '，被送进监狱！';
@@ -295,7 +300,7 @@ export class GameRoom {
     if (this.state.phase !== 'buying' || this.state.pendingTile == null) return { error: '当前不能购买' };
 
     const tileId = this.state.pendingTile;
-    const tile = TILES[tileId];
+    const tile = this.map.tiles[tileId];
     const price = getPropertyPrice(tile);
     if (cur.money < price) return { error: '现金不足，无法购买' };
 
@@ -315,7 +320,7 @@ export class GameRoom {
     if (cur.id !== playerId) return { error: '还没轮到你' };
     if (this.state.phase !== 'buying' || this.state.pendingTile == null) return { error: '当前不能跳过' };
     const tileId = this.state.pendingTile;
-    const tile = TILES[tileId];
+    const tile = this.map.tiles[tileId];
     this.addLog(cur.name + ' 放弃购买，「' + tile.name + '」进入公开拍卖！');
     this.state.phase = 'auction';
     this.state.pendingTile = null;
@@ -356,7 +361,7 @@ export class GameRoom {
   endAuction() {
     if (!this.state || !this.state.auction) return;
     const auction = this.state.auction;
-    const tile = TILES[auction.tileId];
+    const tile = this.map.tiles[auction.tileId];
     if (auction.currentBidder) {
       const winner = this.state.players.find(p => p.id === auction.currentBidder);
       if (winner) {
@@ -395,12 +400,12 @@ export class GameRoom {
     if (cur.id !== playerId) return { error: '还没轮到你' };
     if (this.state.phase !== 'rolling' && this.state.phase !== 'after_move') return { error: '当前阶段不能盖房' };
 
-    const tile = TILES[tileId];
+    const tile = this.map.tiles[tileId];
     if (!tile || tile.type !== 'property') return { error: '只能在地产上盖房' };
     if (this.state.tileOwners[tileId] !== playerId) return { error: '这不是你的地' };
     if (this.state.tileMortgaged[tileId]) return { error: '抵押期间不能盖房' };
 
-    const groupTiles = TILES.filter(t => t.type === 'property' && t.group === tile.group);
+    const groupTiles = this.map.tiles.filter(t => t.type === 'property' && t.group === tile.group);
     const monopoly = groupTiles.every(t => this.state.tileOwners[t.id] === playerId);
     if (!monopoly) return { error: '需要集齐同色整组才能盖房' };
 
@@ -428,23 +433,24 @@ export class GameRoom {
         cur.money -= card.amount;
         break;
       case 'goto': {
-        if (card.position < cur.position) cur.money += PASS_GO_BONUS;
-        cur.position = card.position;
+        const target = card.gotoType ? (this.map.tiles.find(t => t.type === card.gotoType) || {}).id : card.position;
+        if (target != null && target < cur.position) cur.money += PASS_GO_BONUS;
+        if (target != null) cur.position = target;
         break;
       }
       case 'gotoRailroad': {
-        const railroads = TILES.filter(t => t.type === 'railroad').map(t => t.id);
+        const railroads = this.map.tiles.filter(t => t.type === 'railroad').map(t => t.id);
         const next = railroads.find(r => r > cur.position) || railroads[0];
         if (next <= cur.position) cur.money += PASS_GO_BONUS;
         cur.position = next;
         break;
       }
       case 'move': {
-        cur.position = (cur.position + card.steps + BOARD_SIZE) % BOARD_SIZE;
+        cur.position = (cur.position + card.steps + this.map.size) % this.map.size;
         break;
       }
       case 'jail':
-        cur.position = JAIL_TILE_ID;
+        cur.position = this.map.jailId;
         cur.inJail = true;
         cur.jailedTurns = 1;
         break;
@@ -465,9 +471,9 @@ export class GameRoom {
         break;
       }
       case 'teleport': {
-        const target = Math.floor(Math.random() * BOARD_SIZE);
+        const target = Math.floor(Math.random() * this.map.size);
         cur.position = target;
-        text = '被传送到「' + TILES[target].name + '」';
+        text = '被传送到「' + this.map.tiles[target].name + '」';
         break;
       }
       case 'festival':
@@ -483,11 +489,11 @@ export class GameRoom {
         text = '缴纳罚款 -¥80';
         break;
       case 'advance':
-        cur.position = (cur.position + 3) % BOARD_SIZE;
+        cur.position = (cur.position + 3) % this.map.size;
         text = '前进 3 步';
         break;
       case 'backward':
-        cur.position = (cur.position - 3 + BOARD_SIZE) % BOARD_SIZE;
+        cur.position = (cur.position - 3 + this.map.size) % this.map.size;
         text = '后退 3 步';
         break;
       case 'rest':
@@ -517,19 +523,19 @@ export class GameRoom {
 
   calcRent(tileId, ownerId, diceTotal) {
     if (this.state.tileMortgaged[tileId]) return 0;
-    const tile = TILES[tileId];
+    const tile = this.map.tiles[tileId];
     const level = this.state.tileHouses[tileId] || 0;
     if (tile.type === 'property') {
-      const groupTiles = TILES.filter(t => t.type === 'property' && t.group === tile.group);
+      const groupTiles = this.map.tiles.filter(t => t.type === 'property' && t.group === tile.group);
       const monopoly = groupTiles.every(t => this.state.tileOwners[t.id] === ownerId);
       return calcPropertyRent(tile, level, monopoly);
     }
     if (tile.type === 'railroad') {
-      const count = TILES.filter(t => t.type === 'railroad' && this.state.tileOwners[t.id] === ownerId).length;
+      const count = this.map.tiles.filter(t => t.type === 'railroad' && this.state.tileOwners[t.id] === ownerId).length;
       return calcRailroadRent(count);
     }
     if (tile.type === 'utility') {
-      const count = TILES.filter(t => t.type === 'utility' && this.state.tileOwners[t.id] === ownerId).length;
+      const count = this.map.tiles.filter(t => t.type === 'utility' && this.state.tileOwners[t.id] === ownerId).length;
       return calcUtilityRent(count, diceTotal);
     }
     return 0;
@@ -630,7 +636,7 @@ export class GameRoom {
         this._scheduleAI(playerId);
       }
     } else if (this.state.phase === 'buying') {
-      const t = TILES[this.state.pendingTile];
+      const t = this.map.tiles[this.state.pendingTile];
       const price = getPropertyPrice(t);
       if (cur.money >= price) this.buyProperty(playerId);
       else this.skipBuy(playerId);
@@ -644,7 +650,7 @@ export class GameRoom {
     const cur = this.state.players[this.state.current];
     if (cur.id !== playerId) return { error: '还没轮到你' };
     if (this.state.phase !== 'rolling' && this.state.phase !== 'after_move') return { error: '当前阶段不能抵押' };
-    const tile = TILES[tileId];
+    const tile = this.map.tiles[tileId];
     if (!tile || (tile.type !== 'property' && tile.type !== 'railroad' && tile.type !== 'utility')) return { error: '只能抵押地产/车站/公共事业' };
     if (this.state.tileOwners[tileId] !== playerId) return { error: '这不是你的地' };
     if ((this.state.tileHouses[tileId] || 0) > 0) return { error: '该地产上有房屋，需先卖房才能抵押' };
@@ -663,7 +669,7 @@ export class GameRoom {
     if (cur.id !== playerId) return { error: '还没轮到你' };
     if (this.state.phase !== 'rolling' && this.state.phase !== 'after_move') return { error: '当前阶段不能赎回' };
     if (!this.state.tileMortgaged[tileId]) return { error: '该地产未抵押' };
-    const tile = TILES[tileId];
+    const tile = this.map.tiles[tileId];
     const base = Math.floor(getPropertyPrice(tile) / 2);
     const cost = Math.floor(base * 1.1);
     if (cur.money < cost) return { error: '现金不足，无法赎回' };
@@ -680,12 +686,12 @@ export class GameRoom {
     const cur = this.state.players[this.state.current];
     if (cur.id !== playerId) return { error: '还没轮到你' };
     if (this.state.phase !== 'rolling' && this.state.phase !== 'after_move') return { error: '当前阶段不能卖房' };
-    const tile = TILES[tileId];
+    const tile = this.map.tiles[tileId];
     if (!tile || tile.type !== 'property') return { error: '只能卖地产上的房屋' };
     if (this.state.tileOwners[tileId] !== playerId) return { error: '这不是你的地' };
     const houses = this.state.tileHouses[tileId] || 0;
     if (houses <= 0) return { error: '该地没有房屋' };
-    const groupTiles = TILES.filter(t => t.type === 'property' && t.group === tile.group);
+    const groupTiles = this.map.tiles.filter(t => t.type === 'property' && t.group === tile.group);
     const maxH = Math.max(...groupTiles.map(t => this.state.tileHouses[t.id] || 0));
     if (houses < maxH) return { error: '需要均匀拆除（先拆房子多的地）' };
     const refund = Math.floor(getHouseCost(tile.group) * (this.state.houseMultiplier || 1) / 2);
@@ -719,8 +725,8 @@ export class GameRoom {
     if (giveMoney < 0 || getMoney < 0) return { error: '金额不能为负' };
     this.state.pendingTrade = { from: playerId, to: proposal.to, giveTiles, getTiles, giveMoney, getMoney };
     // 交易内容写入日志，所有玩家可见
-    const giveDesc = [...giveTiles.map((id) => TILES[id].name), ...(giveMoney ? ['¥' + giveMoney] : [])].join('、') || '无';
-    const getDesc = [...getTiles.map((id) => TILES[id].name), ...(getMoney ? ['¥' + getMoney] : [])].join('、') || '无';
+    const giveDesc = [...giveTiles.map((id) => this.map.tiles[id].name), ...(giveMoney ? ['¥' + giveMoney] : [])].join('、') || '无';
+    const getDesc = [...getTiles.map((id) => this.map.tiles[id].name), ...(getMoney ? ['¥' + getMoney] : [])].join('、') || '无';
     this.addLog(from.name + ' 提议与 ' + to.name + ' 交易：给[' + giveDesc + '] 换 [' + getDesc + ']');
     this.broadcastState();
     return { ok: true };
@@ -792,7 +798,7 @@ export class GameRoom {
     while (changed && cur.money < 0) {
       changed = false;
       let best = null;
-      for (const t of TILES) {
+      for (const t of this.map.tiles) {
         if (t.type !== 'property') continue;
         if (this.state.tileOwners[t.id] !== cur.id) continue;
         const h = this.state.tileHouses[t.id] || 0;
@@ -800,17 +806,17 @@ export class GameRoom {
         if (best == null || h > (this.state.tileHouses[best] || 0)) best = t.id;
       }
       if (best == null) break;
-      const refund = Math.floor(getHouseCost(TILES[best].group) / 2);
+      const refund = Math.floor(getHouseCost(this.map.tiles[best].group) / 2);
       this.state.tileHouses[best] -= 1;
       cur.money += refund;
-      this.addLog(cur.name + ' 变卖「' + TILES[best].name + '」房屋，获得 ¥' + refund);
+      this.addLog(cur.name + ' 变卖「' + this.map.tiles[best].name + '」房屋，获得 ¥' + refund);
       changed = true;
     }
   }
 
   _autoMortgage(cur) {
     if (cur.money >= 0) return;
-    for (const t of TILES) {
+    for (const t of this.map.tiles) {
       if (cur.money >= 0) break;
       if (t.type !== 'property' && t.type !== 'railroad' && t.type !== 'utility') continue;
       if (this.state.tileOwners[t.id] !== cur.id) continue;
@@ -859,7 +865,7 @@ export class GameRoom {
     this.state.auction = { tileId, currentBid: 0, currentBidder: null, deadline: Date.now() + 15000 };
     this.state.phase = 'auction';
     this.state.pendingTile = null;
-    this.addLog('银行拍卖「' + TILES[tileId].name + '」');
+    this.addLog('银行拍卖「' + this.map.tiles[tileId].name + '」');
     this.scheduleAuctionEnd();
   }
 
@@ -876,7 +882,7 @@ export class GameRoom {
     const alive = this.state.players.filter(p => !p.bankrupt);
     const assets = alive.map((p) => {
       let value = p.money;
-      TILES.forEach((t) => {
+      this.map.tiles.forEach((t) => {
         if (this.state.tileOwners[t.id] === p.id) {
           value += getPropertyPrice(t);
           value += (this.state.tileHouses[t.id] || 0) * getHouseCost(t.group || 'brown');

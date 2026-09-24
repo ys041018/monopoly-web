@@ -1,13 +1,15 @@
 // ============================================================
 // 前端主逻辑：WebSocket + 大厅/游戏 + 回合操作 + 盖房/抵押/交易
 // ============================================================
-import { render, animateMove, animateDice, onTileClick, setBoardTheme } from './board2d.js';
+import { render, animateMove, animateDice, onTileClick, setBoardTheme, setActiveMap } from './board2d.js';
 
 window.addEventListener('error', (e) => {
   const t = document.getElementById('turn-sub');
   if (t) t.textContent = '⚠️ ' + (e.message || '未知错误') + ' @ ' + (e.filename||'').split('/').pop() + ':' + e.lineno;
 });
-import { TILES, GROUPS } from './data/tiles.js';
+import { GROUPS } from './data/tiles.js';
+import { getMap } from './data/maps.js';
+let activeTiles = getMap('standard').tiles;
 import { playForLog, play, setSoundEnabled, isSoundEnabled } from './sound.js';
 
 const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -19,7 +21,7 @@ const nameInput = $('name-input'), roomInput = $('room-input'), joinBtn = $('joi
 const addAiBtn = $('add-ai-btn');
 const createRoomBtn = $('create-room-btn');
 const themeSelect = $('theme-select');
-const roomSettings = $('room-settings'), setMoney = $('set-money'), setRounds = $('set-rounds'), setHouse = $('set-house');
+const roomSettings = $('room-settings'), setMoney = $('set-money'), setRounds = $('set-rounds'), setHouse = $('set-house'), setMap = $('set-map');
 const soundToggle = $('sound-toggle'), copyRoomBtn = $('copy-room-btn');
 const rollBtn = $('roll-btn'), buyBtn = $('buy-btn'), skipBuyBtn = $('skip-buy-btn'), endTurnBtn = $('end-turn-btn');
 const buildBtn = $('build-btn'), mortgageBtn = $('mortgage-btn'), tradeBtn = $('trade-btn');
@@ -100,7 +102,7 @@ tradeBtn.addEventListener('click', () => { toggle(tradePanel); if (!tradePanel.c
 
 function toggle(el) { el.classList.toggle('hidden'); }
 
-[setMoney, setRounds, setHouse].forEach(el => el && el.addEventListener('change', sendSettings));
+[setMoney, setRounds, setHouse, setMap].forEach(el => el && el.addEventListener('change', sendSettings));
 
 // ---------- 棋盘主题 ----------
 (function initTheme() {
@@ -146,6 +148,8 @@ ws.onmessage = (e) => {
         sessionStorage.removeItem('monopoly_player_id');
         sessionStorage.removeItem('monopoly_player_name');
       }
+      renderPlayers();
+      renderRoomSettings();
       break;
     case 'room_created':
       sessionStorage.setItem('monopoly_room', msg.roomCode);
@@ -164,6 +168,7 @@ ws.onmessage = (e) => {
       break;
     case 'game_state':
       state = msg.state;
+      if (state.mapId) { setActiveMap(state.mapId); activeTiles = getMap(state.mapId).tiles; }
       if (!entered) { entered = true; enterGame(); }
       else syncGame();
       break;
@@ -259,7 +264,7 @@ function updateActions() {
     mortgageBtn.classList.remove('hidden');
     tradeBtn.classList.remove('hidden');
   } else if (state.phase === 'buying') {
-    const t = TILES[state.pendingTile];
+    const t = activeTiles[state.pendingTile];
     buyBtn.textContent = '买下这块地（¥' + (t ? tilePrice(t) : 0) + '）';
     buyBtn.classList.remove('hidden');
     skipBuyBtn.classList.remove('hidden');
@@ -290,12 +295,12 @@ function ownedByMe(t) {
 // ---------- 盖房 ----------
 function getBuildableTiles() {
   if (!state) return [];
-  const mine = TILES.filter(t => t.type === 'property' && ownedByMe(t));
+  const mine = activeTiles.filter(t => t.type === 'property' && ownedByMe(t));
   const groups = {};
   mine.forEach(t => { (groups[t.group] ||= []).push(t); });
   const result = [];
   Object.entries(groups).forEach(([group, tiles]) => {
-    const all = TILES.filter(t => t.type === 'property' && t.group === group);
+    const all = activeTiles.filter(t => t.type === 'property' && t.group === group);
     if (!all.every(t => state.tileOwners[t.id] === myId)) return;
     const minH = Math.min(...tiles.map(t => state.tileHouses[t.id] || 0));
     tiles.forEach(t => {
@@ -308,13 +313,13 @@ function getBuildableTiles() {
 
 function canBuildOn(tileId) {
   if (!state) return false;
-  const tile = TILES[tileId];
+  const tile = activeTiles[tileId];
   if (!tile || tile.type !== 'property') return false;
   if (state.tileOwners[tileId] !== myId) return false;
   if (state.tileMortgaged[tileId]) return false;
   const h = state.tileHouses[tileId] || 0;
   if (h >= 5) return false;
-  const groupTiles = TILES.filter(t => t.type === 'property' && t.group === tile.group);
+  const groupTiles = activeTiles.filter(t => t.type === 'property' && t.group === tile.group);
   if (!groupTiles.every(t => state.tileOwners[t.id] === myId)) return false;
   const minH = Math.min(...groupTiles.map(t => state.tileHouses[t.id] || 0));
   if (h > minH) return false;
@@ -339,7 +344,7 @@ function renderBuildPanel() {
 // ---------- 抵押 ----------
 function renderMortgagePanel() {
   mortgagePanel.innerHTML = '';
-  const mine = TILES.filter(t => (t.type === 'property' || t.type === 'railroad' || t.type === 'utility') && ownedByMe(t));
+  const mine = activeTiles.filter(t => (t.type === 'property' || t.type === 'railroad' || t.type === 'utility') && ownedByMe(t));
   if (mine.length === 0) { tip(mortgagePanel, '你还没有可抵押的地产'); return; }
   mine.forEach(t => {
     const mortgaged = state.tileMortgaged[t.id];
@@ -385,7 +390,7 @@ function renderTradePanel() {
   tradePanel.appendChild(mkTitle('我给对方的地产'));
   const myBox = document.createElement('div');
   myBox.className = 'trade-tiles';
-  TILES.filter(t => (t.type === 'property' || t.type === 'railroad' || t.type === 'utility') && ownedByMe(t)).forEach(t => {
+  activeTiles.filter(t => (t.type === 'property' || t.type === 'railroad' || t.type === 'utility') && ownedByMe(t)).forEach(t => {
     const hasHouse = (state.tileHouses[t.id] || 0) > 0;
     const lab = document.createElement('label');
     lab.className = 'trade-tile';
@@ -409,7 +414,7 @@ function renderTradePanel() {
   function renderTheir() {
     theirBox.innerHTML = '';
     const toId = sel.value;
-    TILES.filter(t => (t.type === 'property' || t.type === 'railroad' || t.type === 'utility') && state.tileOwners[t.id] === toId).forEach(t => {
+    activeTiles.filter(t => (t.type === 'property' || t.type === 'railroad' || t.type === 'utility') && state.tileOwners[t.id] === toId).forEach(t => {
       const hasHouse = (state.tileHouses[t.id] || 0) > 0;
       const lab = document.createElement('label');
       lab.className = 'trade-tile';
@@ -490,7 +495,7 @@ function renderAuctionPanel() {
   auctionPanel.innerHTML = '';
   const a = state.auction;
   if (!a) return;
-  const tile = TILES[a.tileId];
+  const tile = activeTiles[a.tileId];
   const bidder = a.currentBidder ? state.players.find(p => p.id === a.currentBidder) : null;
   const title = document.createElement('div');
   title.className = 'p-title';
@@ -531,8 +536,8 @@ function renderTradeOffer() {
   const box = document.createElement('div');
   box.className = 'offer-box';
   const parts = [];
-  if (t.giveTiles.length) parts.push('给 ' + t.giveTiles.map(id => TILES[id].name).join('、'));
-  if (t.getTiles.length) parts.push('要 ' + t.getTiles.map(id => TILES[id].name).join('、'));
+  if (t.giveTiles.length) parts.push('给 ' + t.giveTiles.map(id => activeTiles[id].name).join('、'));
+  if (t.getTiles.length) parts.push('要 ' + t.getTiles.map(id => activeTiles[id].name).join('、'));
   if (t.giveMoney) parts.push('给对方 ¥' + t.giveMoney);
   if (t.getMoney) parts.push('要对方 ¥' + t.getMoney);
   box.textContent = from.name + ' 提议 ' + (to ? to.name : '') + '：' + (parts.join('；') || '空交易');
@@ -614,11 +619,12 @@ function renderRoomSettings() {
   setMoney.value = String(roomSettingsData.startMoney);
   setRounds.value = String(roomSettingsData.maxRounds);
   setHouse.value = String(roomSettingsData.houseMultiplier);
+  if (setMap) setMap.value = roomSettingsData.mapId || 'standard';
 }
 
 function sendSettings() {
   ws.send(JSON.stringify({ type: 'update_settings', settings: {
-    startMoney: Number(setMoney.value), maxRounds: Number(setRounds.value), houseMultiplier: Number(setHouse.value),
+    startMoney: Number(setMoney.value), maxRounds: Number(setRounds.value), houseMultiplier: Number(setHouse.value), mapId: setMap ? setMap.value : 'standard',
   } }));
 }
 
@@ -678,7 +684,7 @@ const EVENT_DESC = {
 };
 
 function renderDeed(tileId) {
-  const tile = TILES[tileId];
+  const tile = activeTiles[tileId];
   if (!tile) return;
   let html = '';
   const ownerId = state.tileOwners[tileId] || null;
@@ -786,7 +792,7 @@ function detectSound() {
 }
 
 const tileColorMap = new Map();
-TILES.forEach(t => {
+activeTiles.forEach(t => {
   if (t.type === 'property') tileColorMap.set(t.name, GROUPS[t.group].color);
   else if (t.type === 'railroad') tileColorMap.set(t.name, '#78909C');
   else if (t.type === 'utility') tileColorMap.set(t.name, '#90A4AE');
