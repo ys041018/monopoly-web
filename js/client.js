@@ -137,7 +137,7 @@ if (authToken) { authMsg.textContent = '正在自动登录...'; }
 
 // ---------- 棋盘主题 ----------
 (function initTheme() {
-  const saved = localStorage.getItem('monopoly_theme') || 'classic';
+  const saved = localStorage.getItem('monopoly_theme') || 'emerald';
   if (themeSelect) themeSelect.value = saved;
   setBoardTheme(saved);
   if (themeSelect) themeSelect.addEventListener('change', () => {

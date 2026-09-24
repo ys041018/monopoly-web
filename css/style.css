@@ -239,3 +239,65 @@ h2 { font-size: 15px; color: var(--text); }
 .auth-info .btn { padding: 6px 12px; font-size: 13px; }
 
 .auth-stats { font-style: normal; color: var(--muted); margin-left: 6px; font-size: 13px; }
+
+/* ============================================================
+   奢华深绿 + 金色主题（整体视觉）
+   ============================================================ */
+:root {
+  --bg-0: #071e19;
+  --card: rgba(7, 40, 32, 0.92);
+  --card-border: rgba(201, 162, 74, 0.55);
+  --text: #f4e9cc;
+  --muted: #b9a97f;
+  --gold-0: #f0d67a;
+  --gold-1: #c9a24a;
+  --green: #1fa468;
+  --shadow: 0 20px 55px rgba(0, 0, 0, 0.55);
+}
+body {
+  color: var(--text);
+  background:
+    radial-gradient(900px 600px at 50% 6%, rgba(212, 175, 55, 0.13), transparent 62%),
+    radial-gradient(1100px 700px at 50% 112%, rgba(22, 96, 74, 0.35), transparent 60%),
+    linear-gradient(160deg, #061a17 0%, #0a2a22 48%, #04120f 100%);
+}
+.card, .game-wrap, .log-panel, .modal-card, .card-popup-inner, .side-card, .turn-card, .room-settings, .auth-panel, .auth-info {
+  background: linear-gradient(160deg, rgba(9, 48, 38, 0.95), rgba(5, 28, 23, 0.95));
+  border: 1px solid var(--card-border);
+  box-shadow: inset 0 0 0 1px rgba(240, 214, 122, 0.12), 0 18px 45px rgba(0, 0, 0, 0.5);
+}
+.card { border-width: 2px; border-color: rgba(201, 162, 74, 0.7); }
+.logo {
+  background: linear-gradient(180deg, #ffeaa8, #e9c766 45%, #b8892f);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.subtitle, h2, .theme-label, .waiting-tip, .deed-note, .deed-row .k, .panel .p-title { color: var(--muted); }
+.log-list li { color: #d8cda8; }
+.btn { border-radius: 12px; font-weight: 700; }
+.btn.primary { background: linear-gradient(180deg, #1fa468, #12784a); border: 1px solid rgba(240, 214, 122, 0.5); color: #f2fff8; }
+.btn.start { background: linear-gradient(180deg, #2bb673, #12875a); border: 1px solid rgba(240, 214, 122, 0.6); color: #f2fff8; }
+.btn.ghost { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(201, 162, 74, 0.45); color: var(--text); }
+.btn.ghost:hover:not(:disabled) { background: rgba(240, 214, 122, 0.12); }
+#join-btn { background: linear-gradient(180deg, #8a4bbd, #5f2d8a); border: 1px solid rgba(240, 214, 122, 0.5); }
+.join-row input, .auth-panel input, .panel select, .panel input[type=number], .money-input, .room-settings select, .theme-select {
+  background: rgba(4, 26, 21, 0.85);
+  border: 1px solid rgba(201, 162, 74, 0.5);
+  color: var(--text);
+  border-radius: 12px;
+}
+.join-row input::placeholder, .auth-panel input::placeholder { color: #8a8163; }
+.player-list li { background: rgba(4, 26, 21, 0.7); border: 1px solid rgba(201, 162, 74, 0.3); }
+.player-list li.current { background: rgba(31, 164, 104, 0.18); border-color: rgba(240, 214, 122, 0.6); }
+.badge { background: rgba(201, 162, 74, 0.18); color: var(--gold-0); }
+.sound-toggle { background: rgba(7, 40, 32, 0.92); border: 1px solid rgba(201, 162, 74, 0.5); color: var(--gold-0); }
+.deed-band { box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25); }
+.deed-row { border-bottom-color: rgba(201, 162, 74, 0.18); }
+.offer-box { background: rgba(31, 164, 104, 0.14); border-color: rgba(240, 214, 122, 0.45); }
+.trade-tile { background: rgba(4, 26, 21, 0.7); border: 1px solid rgba(201, 162, 74, 0.25); }
+.trade-summary { background: rgba(4, 26, 21, 0.8); color: var(--text); }
+.hotkey-panel { background: rgba(4, 26, 21, 0.8); border-color: rgba(201, 162, 74, 0.4); }
+.hotkey-panel kbd { background: rgba(201, 162, 74, 0.15); border-color: rgba(201, 162, 74, 0.5); box-shadow: none; color: var(--gold-0); }
+.auth-info { background: rgba(31, 164, 104, 0.16); border-color: rgba(240, 214, 122, 0.5); }
+.modal { background: rgba(0, 0, 0, 0.72); }
+.build-row { background: rgba(4, 26, 21, 0.7); }
+.panel label { background: rgba(4, 26, 21, 0.6); }

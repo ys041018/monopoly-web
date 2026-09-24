@@ -18,11 +18,12 @@ export function setActiveMap(id) {
 
 // 棋盘主题
 const BOARD_THEMES = {
+  emerald: { paper: '#f7f0d9', centerA: '#0d3a2e', centerB: '#062018', boardBg: '#052018' },
   classic: { paper: '#fdfefe', centerA: '#172231', centerB: '#0f1924', boardBg: '#0f1924' },
   warm:    { paper: '#fff6e5', centerA: '#2a2016', centerB: '#1a130c', boardBg: '#241a11' },
   cool:    { paper: '#eef6ff', centerA: '#122636', centerB: '#081722', boardBg: '#0b1c28' },
 };
-let boardTheme = BOARD_THEMES.classic;
+let boardTheme = BOARD_THEMES.emerald;
 export function setBoardTheme(name) { boardTheme = BOARD_THEMES[name] || BOARD_THEMES.classic; }
 
 let canvas, ctx, dpr;
