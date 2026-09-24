@@ -644,6 +644,8 @@ function renderTradeOffer() {
 }
 
 // ---------- 股市面板 ----------
+let stockQty = 1;   // 交易数量档位：1 / 5 / 10 / 'max'
+
 function renderStockPanel() {
   if (!stockPanel || stockPanel.classList.contains('hidden')) return;
   stockPanel.innerHTML = '';
@@ -652,29 +654,51 @@ function renderStockPanel() {
   const me = state.players.find(p => p.id === myId);
   const cur = state.players[state.current];
   const isMyTurn = !!(cur && cur.id === myId);
+
+  // 数量档位
+  const qtyRow = document.createElement('div');
+  qtyRow.className = 'stock-qty';
+  const qtyLabel = document.createElement('span');
+  qtyLabel.className = 'p-title';
+  qtyLabel.textContent = '每次数量';
+  qtyRow.appendChild(qtyLabel);
+  [1, 5, 10, 'max'].forEach((q) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'qty-btn' + (stockQty === q ? ' active' : '');
+    b.textContent = q === 'max' ? '最大' : String(q);
+    b.addEventListener('click', () => { stockQty = q; renderStockPanel(); });
+    qtyRow.appendChild(b);
+  });
+  stockPanel.appendChild(qtyRow);
+
   state.stocks.forEach((s) => {
     const held = (me && me.stocks && me.stocks[s.id]) || 0;
+    const cash = me ? me.money : 0;
+    const maxBuy = Math.max(0, Math.min(9999, Math.floor(cash / s.price)));
+    const buyQty = stockQty === 'max' ? maxBuy : Math.min(stockQty, maxBuy);
+    const sellQty = stockQty === 'max' ? held : Math.min(stockQty, held);
     const pct = s.prev ? Math.round((s.price - s.prev) / s.prev * 100) : 0;
     const arrow = pct > 0 ? '▲' : (pct < 0 ? '▼' : '—');
     const row = document.createElement('div');
     row.className = 'build-row';
     const info = document.createElement('span');
     info.className = 'b-name';
-    info.textContent = s.name + ' ¥' + s.price + ' ' + arrow + (pct ? Math.abs(pct) + '%' : '') + '｜持 ' + held;
+    info.textContent = s.name + ' ¥' + s.price + ' ' + arrow + (pct ? Math.abs(pct) + '%' : '') + ' · 持' + held;
     row.appendChild(info);
-    const buy = mkBtn('买 1', 'start');
-    buy.disabled = !isMyTurn || !me || me.money < s.price;
-    buy.addEventListener('click', () => ws.send(JSON.stringify({ type: 'buy_stock', stockId: s.id, shares: 1 })));
-    const sell = mkBtn('卖 1', 'ghost');
-    sell.disabled = !isMyTurn || held < 1;
-    sell.addEventListener('click', () => ws.send(JSON.stringify({ type: 'sell_stock', stockId: s.id, shares: 1 })));
+    const buy = mkBtn('买 ' + buyQty, 'start');
+    buy.disabled = !isMyTurn || !me || buyQty < 1;
+    if (!buy.disabled) buy.addEventListener('click', () => ws.send(JSON.stringify({ type: 'buy_stock', stockId: s.id, shares: buyQty })));
+    const sell = mkBtn('卖 ' + sellQty, 'ghost');
+    sell.disabled = !isMyTurn || sellQty < 1;
+    if (!sell.disabled) sell.addEventListener('click', () => ws.send(JSON.stringify({ type: 'sell_stock', stockId: s.id, shares: sellQty })));
     row.appendChild(buy);
     row.appendChild(sell);
     stockPanel.appendChild(row);
   });
   const hint = document.createElement('div');
   hint.className = 'trade-bal';
-  hint.textContent = isMyTurn ? '持股计入总资产，价格每回合波动' : '只能在自己回合买卖股票';
+  hint.textContent = isMyTurn ? '「最大」= 买按现金能买多少 / 卖按全部持股 · 持股计入总资产' : '只能在自己回合买卖股票';
   stockPanel.appendChild(hint);
 }
 

@@ -646,7 +646,7 @@ export class GameRoom {
     if (g.error) return g;
     const { cur, stock } = g;
     const n = Math.floor(Number(shares) || 0);
-    if (n <= 0 || n > 100) return { error: '买入股数需在 1~100 之间' };
+    if (n <= 0 || n > 9999) return { error: '买入股数需在 1~9999 之间' };
     const cost = stock.price * n;
     if (cur.money < cost) return { error: '现金不足，需要 ¥' + cost };
     cur.money -= cost;

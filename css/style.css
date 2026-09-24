@@ -266,6 +266,17 @@ select,.theme-select{cursor:pointer;}
 .trade-summary{font-size:13px;color:var(--ink);background:var(--paper-2);border:2.5px solid var(--ink);border-radius:14px;padding:8px 10px;margin-top:2px;}
 .trade-submit{width:100%;margin-top:2px;}
 
+/* ---------- 股市数量档位 ---------- */
+.stock-qty{display:flex;align-items:center;gap:6px;}
+.stock-qty .p-title{flex:1;font-size:12px;}
+.qty-btn{
+  border:2.5px solid var(--ink);border-radius:999px;background:#fff;color:var(--ink);
+  font-size:12px;font-weight:900;padding:3px 10px;cursor:pointer;
+  box-shadow:0 2px 0 var(--ink);font-family:inherit;
+}
+.qty-btn.active{background:var(--candy-yellow);}
+.qty-btn:hover{transform:translateY(-1px);}
+
 /* ---------- 日志 ---------- */
 .log-panel{
   width:270px;flex:none;display:flex;flex-direction:column;gap:8px;
