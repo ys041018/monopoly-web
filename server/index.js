@@ -8,7 +8,7 @@ import { extname, join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import os from 'os';
 import { GameRoom } from './game-room.js';
-import { dbReady, findUserByUsername, createUser, createSession, findSession, deleteSession, verifyPassword } from './db.js';
+import { dbReady, findUserByUsername, createUser, createSession, findSession, deleteSession, verifyPassword, getStats } from './db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
@@ -103,7 +103,7 @@ wss.on('connection', (ws) => {
     }
   };
 
-  ws.on('message', (data) => {
+  ws.on('message', async (data) => {
     let msg;
     try { msg = JSON.parse(data.toString()); }
     catch { sendError('消息格式错误'); return; }
@@ -113,12 +113,23 @@ wss.on('connection', (ws) => {
       return;
     }
 
+    if (msg.type === 'get_stats') {
+      try {
+        const u = msg.token ? await findSession(String(msg.token)) : null;
+        const stats = u ? await getStats(u.id) : null;
+        sendJSON({ type: 'stats', stats: stats || { wins: 0, losses: 0, games: 0, max_assets: 0 } });
+      } catch (e) { console.error('[stats]', e.message); }
+      return;
+    }
+
     if (msg.type === 'join') {
       if (playerId) return;
+      let joinUserId = null;
+      if (msg.token) { const u = await findSession(String(msg.token)); if (u) joinUserId = u.id; }
       room = getRoom(msg.roomCode);
       if (!room) { sendError('房间不存在，请检查房间码'); return; }
       roomCode = String(msg.roomCode || '').trim().toUpperCase();
-      const result = room.addPlayer(ws, msg.name, msg.playerId);
+      const result = room.addPlayer(ws, msg.name, msg.playerId, joinUserId);
       console.log('[加入] ' + (msg.name || '(空)') + ' 房间=' + (String(msg.roomCode || '').trim().toUpperCase() || '大厅') + ' -> ' +
         (result.error ? ('拒绝: ' + result.error) : (result.spectator ? '旁观' : '成功 id=' + result.id)));
       if (result.error) { room.sendError(ws, result.error); ws.close(); return; }

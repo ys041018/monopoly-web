@@ -21,7 +21,7 @@ const nameInput = $('name-input'), roomInput = $('room-input'), joinBtn = $('joi
 const addAiBtn = $('add-ai-btn');
 const hotkeyBtn = $('hotkey-btn'), hotkeyPanel = $('hotkey-panel');
 const authPanel = $('auth-panel'), authInfo = $('auth-info'), authUser = $('auth-user'), authPass = $('auth-pass'), authNick = $('auth-nick'), authMsg = $('auth-msg'), authName = $('auth-name');
-const authLoginBtn = $('auth-login-btn'), authRegisterBtn = $('auth-register-btn'), authLogoutBtn = $('auth-logout-btn');
+const authLoginBtn = $('auth-login-btn'), authRegisterBtn = $('auth-register-btn'), authLogoutBtn = $('auth-logout-btn'), authStats = $('auth-stats');
 const createRoomBtn = $('create-room-btn');
 const themeSelect = $('theme-select');
 const roomSettings = $('room-settings'), setMoney = $('set-money'), setRounds = $('set-rounds'), setHouse = $('set-house'), setMap = $('set-map');
@@ -60,7 +60,7 @@ let cardTimer = null;
   if (roomInput) roomInput.value = savedRoom;
   const send = () => {
     gotError = false;
-    ws.send(JSON.stringify({ type: 'join', name: savedName, playerId: savedId, roomCode: savedRoom }));
+    ws.send(JSON.stringify({ type: 'join', name: savedName, playerId: savedId, roomCode: savedRoom, token: authToken || undefined }));
     joinBtn.disabled = true;
     setMsg('正在重连...');
   };
@@ -75,7 +75,7 @@ joinBtn.addEventListener('click', () => {
   const roomCode = roomInput.value.trim();
   sessionStorage.setItem('monopoly_room', roomCode);
   gotError = false;
-  ws.send(JSON.stringify({ type: 'join', name, playerId: sessionStorage.getItem('monopoly_player_id') || undefined, roomCode }));
+  ws.send(JSON.stringify({ type: 'join', name, playerId: sessionStorage.getItem('monopoly_player_id') || undefined, roomCode, token: authToken || undefined }));
   joinBtn.disabled = true;
   setMsg('正在加入...');
 });
@@ -182,10 +182,16 @@ ws.onmessage = (e) => {
       authName.textContent = msg.user.nickname;
       nameInput.value = msg.user.nickname;
       authMsg.textContent = ''; authMsg.className = 'msg';
+      ws.send(JSON.stringify({ type: 'get_stats', token: msg.token }));
       break;
     case 'auth_error':
       authMsg.textContent = msg.message; authMsg.className = 'msg error';
       break;
+    case 'stats': {
+      const st = msg.stats || {};
+      if (authStats) authStats.textContent = ' · 战绩 ' + (st.wins || 0) + ' 胜 / ' + (st.losses || 0) + ' 负 · 最高资产 ¥' + (st.max_assets || 0);
+      break;
+    }
     case 'auth_logout':
       authPanel.classList.remove('hidden'); authInfo.classList.add('hidden');
       break;

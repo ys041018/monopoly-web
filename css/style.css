@@ -237,3 +237,5 @@ h2 { font-size: 15px; color: var(--text); }
 .auth-btns .btn { flex: 1; padding: 10px; font-size: 14px; }
 .auth-info { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-radius: 12px; background: rgba(46,204,113,0.12); border: 1px solid rgba(46,204,113,0.35); font-size: 14px; }
 .auth-info .btn { padding: 6px 12px; font-size: 13px; }
+
+.auth-stats { font-style: normal; color: var(--muted); margin-left: 6px; font-size: 13px; }

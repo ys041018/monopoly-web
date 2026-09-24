@@ -8,6 +8,7 @@ import {
   calcPropertyRent, calcRailroadRent, calcUtilityRent, getPropertyPrice, getHouseCost, HOTEL_LEVEL, DEFAULT_MAX_ROUNDS,
 } from './rules.js';
 import { getMap } from '../js/data/maps.js';
+import { updateStats } from './db.js';
 import { CHANCE_CARDS, CHEST_CARDS } from '../js/data/cards.js';
 
 const PLAYER_COLORS = ['#EF5350', '#FF9800', '#FDD835', '#66BB6A', '#4FC3F7', '#AB47BC', '#26C6DA', '#EC407A'];
@@ -41,7 +42,7 @@ export class GameRoom {
     return { ok: true };
   }
 
-  addPlayer(ws, name, playerId) {
+  addPlayer(ws, name, playerId, userId) {
     // 重连：大厅或游戏中，只要 playerId 匹配现有玩家，恢复其连接
     if (playerId && this.players.has(playerId)) {
       const p = this.players.get(playerId);
@@ -62,7 +63,7 @@ export class GameRoom {
     const color = PLAYER_COLORS.find(c => !used.has(c)) || PLAYER_COLORS[0];
 
     const id = uid();
-    const player = { ws, id, name: cleanName, color, isHost: this.players.size === 0 };
+    const player = { ws, id, name: cleanName, color, isHost: this.players.size === 0, userId: userId || null };
     this.players.set(id, player);
     this.broadcastPlayerList();
     return { id, player: { id, name: cleanName, color, isHost: player.isHost } };
@@ -111,7 +112,7 @@ export class GameRoom {
     this.started = true;
     this.map = getMap(this.settings.mapId);
     const players = [...this.players.values()].map(p => ({
-      id: p.id, name: p.name, color: p.color, isHost: p.isHost, isAI: !!p.isAI,
+      id: p.id, name: p.name, color: p.color, isHost: p.isHost, isAI: !!p.isAI, userId: p.userId || null,
       position: 0, money: this.settings.startMoney, inJail: false, jailedTurns: 0, outOfJailCards: 0, rest: false, bankrupt: false,
     }));
 
@@ -869,12 +870,34 @@ export class GameRoom {
     this.scheduleAuctionEnd();
   }
 
+  _calcAssets(p) {
+    let v = p.money || 0;
+    for (const t of this.map.tiles) {
+      if (this.state.tileOwners[t.id] === p.id) {
+        v += getPropertyPrice(t);
+        v += (this.state.tileHouses[t.id] || 0) * getHouseCost(t.group || 'brown');
+      }
+    }
+    return v;
+  }
+
+  _recordStats() {
+    if (!this.state || !this.state.players) return;
+    const winner = this.state.winner;
+    for (const p of this.state.players) {
+      if (!p.userId) continue;
+      const assets = this._calcAssets(p);
+      updateStats(p.userId, { win: winner === p.id, assets }).catch((e) => console.error('[stats]', e.message));
+    }
+  }
+
   checkWinner() {
     const alive = this.state.players.filter(p => !p.bankrupt);
     if (alive.length <= 1) {
       this.state.phase = 'gameOver';
       this.state.winner = alive.length === 1 ? alive[0].id : null;
       this.addLog(alive.length === 1 ? alive[0].name + ' 获胜！' : '游戏结束');
+      this._recordStats();
     }
   }
 
@@ -894,6 +917,7 @@ export class GameRoom {
     this.state.phase = 'gameOver';
     this.state.winner = assets[0] ? assets[0].id : null;
     if (assets[0]) this.addLog('回合结束，' + this.state.players.find(p => p.id === assets[0].id).name + ' 以总资产 ¥' + assets[0].value + ' 获胜！');
+    this._recordStats();
   }
 
   resetToLobby() {
