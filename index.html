@@ -69,8 +69,8 @@
         <ul id="player-list" class="player-list"></ul>
       </div>
 
-      <div id="room-settings" class="room-settings hidden">
-        <h2>房间设置（房主可调）</h2>
+      <details id="room-settings" class="room-settings hidden">
+        <summary>⚙️ 房间设置（房主可调）</summary>
         <label>初始资金
           <select id="set-money"><option value="1000">¥1000</option><option value="1500">¥1500</option><option value="2000">¥2000</option><option value="3000">¥3000</option><option value="5000">¥5000</option></select>
         </label>
@@ -83,7 +83,7 @@
         <label>房价倍率
           <select id="set-house"><option value="0.5">0.5x</option><option value="1">1x</option><option value="1.5">1.5x</option><option value="2">2x</option></select>
         </label>
-      </div>
+      </details>
       <button id="add-ai-btn" class="btn ghost hidden">🤖 添加机器人</button>
       <button id="start-btn" class="btn start" disabled>开始游戏</button>
       <p id="lobby-msg" class="msg"></p>

@@ -385,3 +385,46 @@ body {
   pointer-events: none;
 }
 @media (max-width: 1100px) { .lobby-card::before { display: none; } }
+
+/* ===== 大厅布局与卡牌可读性修复 ===== */
+.lobby-card {
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
+  padding: 22px 26px;
+  gap: 12px;
+  scrollbar-width: thin;
+}
+.lobby-card::-webkit-scrollbar { width: 8px; }
+.lobby-card::-webkit-scrollbar-thumb { background: rgba(201, 162, 74, 0.5); border-radius: 4px; }
+.room-settings summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--gold-0);
+  list-style: none;
+  padding: 2px 0;
+  outline: none;
+}
+.room-settings summary::-webkit-details-marker { display: none; }
+.room-settings summary::before { content: '▸ '; }
+.room-settings[open] summary::before { content: '▾ '; }
+.room-settings[open] { gap: 10px; }
+.card-popup-inner::before {
+  background: radial-gradient(circle at 50% 50%, rgba(3, 18, 14, 0.90), rgba(1, 8, 6, 0.97));
+}
+.card-popup-title {
+  font-size: 27px;
+  font-weight: 900;
+  color: #ffe9a8;
+  text-shadow: 0 0 14px rgba(0, 0, 0, 1), 0 3px 6px #000, 0 0 30px rgba(0, 0, 0, 0.95);
+}
+.card-popup-text {
+  font-size: 21px;
+  font-weight: 700;
+  color: #fffdf3;
+  text-shadow: 0 0 12px rgba(0, 0, 0, 1), 0 3px 6px #000, 0 0 24px rgba(0, 0, 0, 0.9);
+  max-width: 250px;
+}
+
+.room-settings, .room-settings[open] { display: block; }
+.room-settings summary { margin-bottom: 4px; }
+.room-settings label { margin-top: 8px; }
