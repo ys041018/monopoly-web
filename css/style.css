@@ -304,7 +304,7 @@ body {
 
 /* ===== 素材应用：背景图 + 金色装饰边框 + Logo 图标 ===== */
 body {
-  background: url('../assets/bg-vault.jpg') center / cover no-repeat fixed, #04120f;
+  background: url('../assets/bg-casino.jpg') center / cover no-repeat fixed, #04120f;
 }
 .card, .game-wrap, .log-panel {
   border-radius: 0;
