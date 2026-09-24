@@ -4,7 +4,7 @@
   "type": "module",
   "description": "大富翁 - 网页联机版（单房间 2~6 人）",
   "scripts": {
-    "start": "node --env-file-if-exists=.env server/index.js",
+    "start": "node server/index.js",
     "dev": "node --watch --env-file-if-exists=.env server/index.js"
   },
   "dependencies": {
@@ -14,6 +14,6 @@
     "playwright": "^1.63.0"
   },
   "engines": {
-    "node": ">=22.9.0"
+    "node": ">=20"
   }
 }
