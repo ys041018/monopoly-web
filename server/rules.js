@@ -19,6 +19,26 @@ export const HOTEL_LEVEL = 5;                     // level 5 = 旅馆
 export const MORTGAGE_RATE = 0.5;                 // 抵押按半价
 export const UNMORTGAGE_INTEREST = 0.1;           // 赎回 +10%
 
+// 快速模式预设：高起点资金、租金加成、回合更少、倒计时更短
+export const FAST_MODE = {
+  startMoney: 3000,
+  maxRounds: 30,
+  houseMultiplier: 1.5,
+  rentMultiplier: 1.5,
+  turnTimeout: 25000,
+};
+
+// 银行利息：每回合结束时按现金结算
+export const DEFAULT_INTEREST_RATE = 0.01;
+
+// 股票定义（价格由服务端每回合波动）
+export const STOCK_DEFS = [
+  { id: 'bank',  name: '银行股', base: 120 },
+  { id: 'power', name: '能源股', base: 90 },
+  { id: 'tech',  name: '科技股', base: 150 },
+  { id: 'land',  name: '地产股', base: 100 },
+];
+
 // 地产租金：baseRent × (level+1)，垄断（集齐同色组）翻倍
 export function calcPropertyRent(tile, level, monopoly) {
   const l = Math.max(0, Math.min(level, HOTEL_LEVEL));

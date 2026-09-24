@@ -25,11 +25,12 @@ const authLoginBtn = $('auth-login-btn'), authRegisterBtn = $('auth-register-btn
 const createRoomBtn = $('create-room-btn');
 const themeSelect = $('theme-select');
 const roomSettings = $('room-settings'), setMoney = $('set-money'), setRounds = $('set-rounds'), setHouse = $('set-house'), setMap = $('set-map');
+const setFast = $('set-fast'), setTeam = $('set-team'), setInterest = $('set-interest');
 const soundToggle = $('sound-toggle'), copyRoomBtn = $('copy-room-btn');
 const rollBtn = $('roll-btn'), buyBtn = $('buy-btn'), skipBuyBtn = $('skip-buy-btn'), endTurnBtn = $('end-turn-btn');
-const buildBtn = $('build-btn'), mortgageBtn = $('mortgage-btn'), tradeBtn = $('trade-btn');
+const buildBtn = $('build-btn'), mortgageBtn = $('mortgage-btn'), tradeBtn = $('trade-btn'), stockBtn = $('stock-btn');
 const bailBtn = $('bail-btn'), jailcardBtn = $('jailcard-btn');
-const buildPanel = $('build-panel'), mortgagePanel = $('mortgage-panel'), tradePanel = $('trade-panel'), tradeOffer = $('trade-offer'), auctionPanel = $('auction-panel');
+const buildPanel = $('build-panel'), mortgagePanel = $('mortgage-panel'), tradePanel = $('trade-panel'), tradeOffer = $('trade-offer'), auctionPanel = $('auction-panel'), stockPanel = $('stock-panel');
 const waitingTip = $('waiting-tip'), diceDisplay = $('dice-display');
 const lobbyMsg = $('lobby-msg'), playerList = $('player-list'), playerCount = $('player-count');
 const gamePlayerList = $('game-player-list'), gamePlayerCount = $('game-player-count');
@@ -104,6 +105,7 @@ endTurnBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'end_t
 buildBtn.addEventListener('click', () => { toggle(buildPanel); if (!buildPanel.classList.contains('hidden')) renderBuildPanel(); });
 mortgageBtn.addEventListener('click', () => { toggle(mortgagePanel); if (!mortgagePanel.classList.contains('hidden')) renderMortgagePanel(); });
 tradeBtn.addEventListener('click', () => { toggle(tradePanel); if (!tradePanel.classList.contains('hidden')) renderTradePanel(); });
+stockBtn.addEventListener('click', () => { toggle(stockPanel); if (!stockPanel.classList.contains('hidden')) renderStockPanel(); });
 
 authLoginBtn.addEventListener('click', () => {
   if (!authUser.value.trim() || !authPass.value) { authMsg.textContent = '请输入用户名和密码'; authMsg.className = 'msg error'; return; }
@@ -131,7 +133,7 @@ ws.addEventListener('open', () => { if (authToken) ws.send(JSON.stringify({ type
 function toggle(el) { el.classList.toggle('hidden'); }
 hotkeyBtn.addEventListener('click', () => toggle(hotkeyPanel));
 
-[setMoney, setRounds, setHouse, setMap].forEach(el => el && el.addEventListener('change', sendSettings));
+[setMoney, setRounds, setHouse, setMap, setFast, setTeam, setInterest].forEach(el => el && el.addEventListener('change', sendSettings));
 
 if (authToken) { authMsg.textContent = '正在自动登录...'; }
 
@@ -298,8 +300,8 @@ function updateActions() {
   if (state.phase === 'gameOver') { waitingTip.textContent = '游戏已结束'; waitingTip.classList.remove('hidden'); return; }
   if (state.phase === 'auction') { renderAuctionPanel(); return; }
   const myTurn = !isSpectator && state.players[state.current].id === myId;
-  // 交易不受回合限制：任何时候（非旁观者）都能发起
-  if (!isSpectator) tradeBtn.classList.remove('hidden');
+  // 交易 / 股市不受回合限制：非旁观者随时可打开（面板内自行判断是否轮到我）
+  if (!isSpectator) { tradeBtn.classList.remove('hidden'); stockBtn.classList.remove('hidden'); }
   if (!myTurn) { waitingTip.classList.remove('hidden'); return; }
 
   if (state.phase === 'rolling') {
@@ -617,6 +619,41 @@ function renderTradeOffer() {
   tradeOffer.appendChild(acts);
 }
 
+// ---------- 股市面板 ----------
+function renderStockPanel() {
+  if (!stockPanel || stockPanel.classList.contains('hidden')) return;
+  stockPanel.innerHTML = '';
+  if (!state || !state.stocks) { tip(stockPanel, '开局后才能交易股票'); return; }
+  if (isSpectator) { tip(stockPanel, '旁观模式不能交易'); return; }
+  const me = state.players.find(p => p.id === myId);
+  const cur = state.players[state.current];
+  const isMyTurn = !!(cur && cur.id === myId);
+  state.stocks.forEach((s) => {
+    const held = (me && me.stocks && me.stocks[s.id]) || 0;
+    const pct = s.prev ? Math.round((s.price - s.prev) / s.prev * 100) : 0;
+    const arrow = pct > 0 ? '▲' : (pct < 0 ? '▼' : '—');
+    const row = document.createElement('div');
+    row.className = 'build-row';
+    const info = document.createElement('span');
+    info.className = 'b-name';
+    info.textContent = s.name + ' ¥' + s.price + ' ' + arrow + (pct ? Math.abs(pct) + '%' : '') + '｜持 ' + held;
+    row.appendChild(info);
+    const buy = mkBtn('买 1', 'start');
+    buy.disabled = !isMyTurn || !me || me.money < s.price;
+    buy.addEventListener('click', () => ws.send(JSON.stringify({ type: 'buy_stock', stockId: s.id, shares: 1 })));
+    const sell = mkBtn('卖 1', 'ghost');
+    sell.disabled = !isMyTurn || held < 1;
+    sell.addEventListener('click', () => ws.send(JSON.stringify({ type: 'sell_stock', stockId: s.id, shares: 1 })));
+    row.appendChild(buy);
+    row.appendChild(sell);
+    stockPanel.appendChild(row);
+  });
+  const hint = document.createElement('div');
+  hint.className = 'trade-bal';
+  hint.textContent = isMyTurn ? '持股计入总资产，价格每回合波动' : '只能在自己回合买卖股票';
+  stockPanel.appendChild(hint);
+}
+
 // ---------- 工具 ----------
 function mkRow(name, status) {
   const row = document.createElement('div');
@@ -650,8 +687,9 @@ function tip(el, text) {
 
 // ---------- 渲染 ----------
 function renderPlayers() {
+  const modeChips = state ? ((state.fastMode ? ' ⚡' : '') + (state.teamMode ? ' 🤝' : '')) : '';
   playerCount.textContent = players.length + '/8';
-  gamePlayerCount.textContent = players.length + '/8';
+  gamePlayerCount.textContent = players.length + '/8' + modeChips;
   playerList.innerHTML = '';
   gamePlayerList.innerHTML = '';
   const curId = state ? state.players[state.current].id : null;
@@ -664,7 +702,7 @@ function renderPlayers() {
     const isCur = p.id === curId;
     const li2 = document.createElement('li');
     if (isCur) li2.classList.add('current');
-    li2.innerHTML = `<span class="dot" style="background:${p.color}"></span><span class="p-name">${escapeHtml(p.name)}</span>${sp && sp.bankrupt ? '<span class="tag">破产</span>' : ''}${isCur ? '<span class="tag turn">回合中</span>' : ''}<span class="p-money">¥${sp ? sp.money : 1500}</span>`;
+    li2.innerHTML = `<span class="dot" style="background:${p.color}"></span><span class="p-name">${escapeHtml(p.name)}</span>${sp && sp.team ? '<span class="tag">' + sp.team + ' 队</span>' : ''}${sp && sp.bankrupt ? '<span class="tag">破产</span>' : ''}${isCur ? '<span class="tag turn">回合中</span>' : ''}<span class="p-money">¥${sp ? sp.money : 1500}</span>`;
     gamePlayerList.appendChild(li2);
   });
 }
@@ -678,11 +716,16 @@ function renderRoomSettings() {
   setRounds.value = String(roomSettingsData.maxRounds);
   setHouse.value = String(roomSettingsData.houseMultiplier);
   if (setMap) setMap.value = roomSettingsData.mapId || 'standard';
+  if (setFast) setFast.checked = !!roomSettingsData.fastMode;
+  if (setTeam) setTeam.checked = !!roomSettingsData.teamMode;
+  if (setInterest) setInterest.value = String(roomSettingsData.interestRate != null ? roomSettingsData.interestRate : 0.01);
 }
 
 function sendSettings() {
   ws.send(JSON.stringify({ type: 'update_settings', settings: {
     startMoney: Number(setMoney.value), maxRounds: Number(setRounds.value), houseMultiplier: Number(setHouse.value), mapId: setMap ? setMap.value : 'standard',
+    fastMode: !!(setFast && setFast.checked), teamMode: !!(setTeam && setTeam.checked),
+    interestRate: Number(setInterest ? setInterest.value : 0.01),
   } }));
 }
 

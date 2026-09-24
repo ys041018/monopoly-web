@@ -6,6 +6,7 @@ import {
   START_MONEY, MAX_PLAYERS, MIN_PLAYERS, PASS_GO_BONUS,
   JAIL_BAIL,
   calcPropertyRent, calcRailroadRent, calcUtilityRent, getPropertyPrice, getHouseCost, HOTEL_LEVEL, DEFAULT_MAX_ROUNDS,
+  FAST_MODE, STOCK_DEFS, DEFAULT_INTEREST_RATE,
 } from './rules.js';
 import { getMap } from '../js/data/maps.js';
 import { updateStats } from './db.js';
@@ -24,7 +25,10 @@ export class GameRoom {
     this.state = null;
     this._auctionTimer = null;
     this._turnTimer = null;
-    this.settings = { startMoney: START_MONEY, maxRounds: DEFAULT_MAX_ROUNDS, houseMultiplier: 1, mapId: 'standard' };
+    this.settings = {
+      startMoney: START_MONEY, maxRounds: DEFAULT_MAX_ROUNDS, houseMultiplier: 1, mapId: 'standard',
+      fastMode: false, teamMode: false, interestRate: DEFAULT_INTEREST_RATE,
+    };
     this.map = getMap(this.settings.mapId);
   }
 
@@ -37,6 +41,9 @@ export class GameRoom {
     if (v.maxRounds != null) this.settings.maxRounds = Math.max(10, Math.min(200, Math.floor(Number(v.maxRounds)) || DEFAULT_MAX_ROUNDS));
     if (v.houseMultiplier != null) this.settings.houseMultiplier = Math.max(0.5, Math.min(3, Number(v.houseMultiplier) || 1));
     if (v.mapId) this.settings.mapId = getMap(v.mapId).id;
+    if (v.fastMode != null) this.settings.fastMode = !!v.fastMode;
+    if (v.teamMode != null) this.settings.teamMode = !!v.teamMode;
+    if (v.interestRate != null) this.settings.interestRate = Math.max(0, Math.min(0.05, Number(v.interestRate) || 0));
     this.map = getMap(this.settings.mapId);
     this.broadcastPlayerList();
     return { ok: true };
@@ -110,12 +117,22 @@ export class GameRoom {
     if (!host || !host.isHost) return { error: '只有房主可以开始游戏' };
     if (this.players.size < MIN_PLAYERS) return { error: '至少需要 2 名玩家' };
     if (this.started) return { error: '游戏已经开始' };
+    if (this.settings.teamMode && this.players.size < 4) return { error: '团队模式至少需要 4 名玩家（2v2）' };
+    if (this.settings.teamMode && this.players.size % 2 !== 0) return { error: '团队模式需要偶数人数（2v2 / 3v3）' };
 
     this.started = true;
     this.map = getMap(this.settings.mapId);
+    // 快速模式：套用预设（高起点资金、租金加成、回合更少、倒计时更短）
+    const fast = !!this.settings.fastMode;
+    const startMoney = fast ? FAST_MODE.startMoney : this.settings.startMoney;
+    const maxRounds = fast ? FAST_MODE.maxRounds : this.settings.maxRounds;
+    const houseMultiplier = fast ? FAST_MODE.houseMultiplier : this.settings.houseMultiplier;
+    let teamIdx = 0;
     const players = [...this.players.values()].map(p => ({
       id: p.id, name: p.name, color: p.color, isHost: p.isHost, isAI: !!p.isAI, userId: p.userId || null,
-      position: 0, money: this.settings.startMoney, inJail: false, jailedTurns: 0, outOfJailCards: 0, rest: false, bankrupt: false,
+      position: 0, money: startMoney, inJail: false, jailedTurns: 0, outOfJailCards: 0, rest: false, bankrupt: false,
+      team: this.settings.teamMode ? (teamIdx++ % 2 === 0 ? 'A' : 'B') : null,
+      stocks: {},
     }));
 
     this.state = {
@@ -134,9 +151,15 @@ export class GameRoom {
       pendingTile: null,
       lastMove: null,
       turnDeadline: null,
-      maxRounds: this.settings.maxRounds,
-      houseMultiplier: this.settings.houseMultiplier,
+      maxRounds,
+      houseMultiplier,
       mapId: this.settings.mapId,
+      fastMode: fast,
+      teamMode: !!this.settings.teamMode,
+      rentMultiplier: fast ? FAST_MODE.rentMultiplier : 1,
+      interestRate: this.settings.interestRate || 0,
+      turnTimeout: fast ? FAST_MODE.turnTimeout : TURN_TIMEOUT,
+      stocks: STOCK_DEFS.map(d => ({ id: d.id, name: d.name, base: d.base, price: d.base, prev: d.base })),
       log: ['游戏开始！'],
     };
 
@@ -251,12 +274,16 @@ export class GameRoom {
         pendingTile = to;
         logMsg += '（无主，可购买 ¥' + getPropertyPrice(tile) + '）';
       } else if (ownerId !== cur.id) {
-        const rent = this.calcRent(to, ownerId, steps);
-        cur.money -= rent;
         const owner = ps.find(p => p.id === ownerId);
-        if (owner) owner.money += rent;
-        logMsg += '，支付租金 ¥' + rent + ' 给 ' + (owner ? owner.name : '?');
-        if (cur.money < 0) creditor = ownerId;
+        if (this.state.teamMode && owner && owner.team && owner.team === cur.team) {
+          logMsg += '（队友的地产，免租）';
+        } else {
+          const rent = Math.round(this.calcRent(to, ownerId, steps) * (this.state.rentMultiplier || 1));
+          cur.money -= rent;
+          if (owner) owner.money += rent;
+          logMsg += '，支付租金 ¥' + rent + ' 给 ' + (owner ? owner.name : '?');
+          if (cur.money < 0) creditor = ownerId;
+        }
       } else {
         logMsg += '（自己的地产）';
       }
@@ -544,13 +571,76 @@ export class GameRoom {
     return 0;
   }
 
+  // ---------- 股市 ----------
+  _updateStockPrices() {
+    if (!this.state || !this.state.stocks) return;
+    this.state.stocks.forEach((s) => {
+      s.prev = s.price;
+      const drift = ((s.base - s.price) / s.base) * 0.12;   // 均值回归，避免价格跑飞
+      const noise = (Math.random() - 0.5) * 0.16;           // 每回合随机波动
+      const next = Math.round(s.price * (1 + drift + noise));
+      s.price = Math.max(Math.round(s.base * 0.3), Math.min(Math.round(s.base * 2.5), next));
+    });
+  }
+
+  _stockGuard(playerId, stockId) {
+    if (!this.state || !this.state.stocks) return { error: '游戏未开始' };
+    const cur = this.state.players[this.state.current];
+    if (!cur || cur.id !== playerId) return { error: '还没轮到你' };
+    if (this.state.phase !== 'rolling' && this.state.phase !== 'after_move') return { error: '只能在自己回合买卖股票' };
+    const stock = this.state.stocks.find(s => s.id === stockId);
+    if (!stock) return { error: '没有这支股票' };
+    return { cur, stock };
+  }
+
+  buyStock(playerId, stockId, shares) {
+    const g = this._stockGuard(playerId, stockId);
+    if (g.error) return g;
+    const { cur, stock } = g;
+    const n = Math.floor(Number(shares) || 0);
+    if (n <= 0 || n > 100) return { error: '买入股数需在 1~100 之间' };
+    const cost = stock.price * n;
+    if (cur.money < cost) return { error: '现金不足，需要 ¥' + cost };
+    cur.money -= cost;
+    cur.stocks[stock.id] = (cur.stocks[stock.id] || 0) + n;
+    this.addLog(cur.name + ' 买入「' + stock.name + '」' + n + ' 股（¥' + stock.price + '/股，共 ¥' + cost + '）');
+    this.broadcastState();
+    return { ok: true };
+  }
+
+  sellStock(playerId, stockId, shares) {
+    const g = this._stockGuard(playerId, stockId);
+    if (g.error) return g;
+    const { cur, stock } = g;
+    const n = Math.floor(Number(shares) || 0);
+    const held = cur.stocks[stock.id] || 0;
+    if (n <= 0) return { error: '卖出股数不正确' };
+    if (held < n) return { error: '持股不足（当前 ' + held + ' 股）' };
+    const gain = stock.price * n;
+    cur.money += gain;
+    cur.stocks[stock.id] = held - n;
+    this.addLog(cur.name + ' 卖出「' + stock.name + '」' + n + ' 股，得到 ¥' + gain);
+    this.broadcastState();
+    return { ok: true };
+  }
+
   // 回合推进
   finishTurn() {
     const n = this.state.players.length;
+    // 回合结束结算存款利息
+    const ending = this.state.players[this.state.current];
+    const rate = this.state.interestRate || 0;
+    if (ending && !ending.bankrupt && rate > 0 && ending.money > 0) {
+      const interest = Math.floor(ending.money * rate);
+      if (interest > 0) {
+        ending.money += interest;
+        this.addLog(ending.name + ' 存款利息 +¥' + interest);
+      }
+    }
     let guard = 0;
     do {
       this.state.current = (this.state.current + 1) % n;
-      if (this.state.current === 0) this.state.round++;
+      if (this.state.current === 0) { this.state.round++; this._updateStockPrices(); }
       const p = this.state.players[this.state.current];
       if (p.rest) { p.rest = false; continue; }
       if (p.bankrupt) continue;
@@ -598,8 +688,9 @@ export class GameRoom {
     }
     const cur = this.state.players[this.state.current];
     if (!cur || cur.bankrupt || cur.isAI) { this.state.turnDeadline = null; return; }
-    this.state.turnDeadline = Date.now() + TURN_TIMEOUT;
-    this._turnTimer = setTimeout(() => { this._turnTimer = null; this._onTurnTimeout(); }, TURN_TIMEOUT);
+    const timeout = this.state.turnTimeout || TURN_TIMEOUT;
+    this.state.turnDeadline = Date.now() + timeout;
+    this._turnTimer = setTimeout(() => { this._turnTimer = null; this._onTurnTimeout(); }, timeout);
   }
 
   _onTurnTimeout() {
@@ -880,7 +971,14 @@ export class GameRoom {
         v += (this.state.tileHouses[t.id] || 0) * getHouseCost(t.group || 'brown');
       }
     }
+    v += this.stockValue(p);
     return v;
+  }
+
+  // 持股总市值
+  stockValue(player) {
+    if (!this.state || !this.state.stocks || !player || !player.stocks) return 0;
+    return this.state.stocks.reduce((sum, s) => sum + (player.stocks[s.id] || 0) * s.price, 0);
   }
 
   _recordStats() {
@@ -889,12 +987,27 @@ export class GameRoom {
     for (const p of this.state.players) {
       if (!p.userId) continue;
       const assets = this._calcAssets(p);
-      updateStats(p.userId, { win: winner === p.id, assets }).catch((e) => console.error('[stats]', e.message));
+      // 团队模式下整队记胜
+      const won = this.state.winnerTeam ? p.team === this.state.winnerTeam : winner === p.id;
+      updateStats(p.userId, { win: won, assets }).catch((e) => console.error('[stats]', e.message));
     }
   }
 
   checkWinner() {
     const alive = this.state.players.filter(p => !p.bankrupt);
+    if (this.state.teamMode) {
+      const teams = [...new Set(this.state.players.map(p => p.team || 'A'))];
+      const aliveTeams = teams.filter(t => alive.some(p => (p.team || 'A') === t));
+      if (aliveTeams.length <= 1) {
+        this.state.phase = 'gameOver';
+        this.state.winnerTeam = aliveTeams[0] || null;
+        const rep = alive.find(p => (p.team || 'A') === this.state.winnerTeam);
+        this.state.winner = rep ? rep.id : null;
+        this.addLog(this.state.winnerTeam ? (this.state.winnerTeam + ' 队获胜！') : '游戏结束');
+        this._recordStats();
+      }
+      return;
+    }
     if (alive.length <= 1) {
       this.state.phase = 'gameOver';
       this.state.winner = alive.length === 1 ? alive[0].id : null;
@@ -905,18 +1018,20 @@ export class GameRoom {
 
   settleByAssets() {
     const alive = this.state.players.filter(p => !p.bankrupt);
-    const assets = alive.map((p) => {
-      let value = p.money;
-      this.map.tiles.forEach((t) => {
-        if (this.state.tileOwners[t.id] === p.id) {
-          value += getPropertyPrice(t);
-          value += (this.state.tileHouses[t.id] || 0) * getHouseCost(t.group || 'brown');
-        }
-      });
-      return { id: p.id, value };
-    });
+    const assets = alive.map(p => ({ id: p.id, team: p.team || null, value: this._calcAssets(p) }));
     assets.sort((a, b) => b.value - a.value);
     this.state.phase = 'gameOver';
+    if (this.state.teamMode) {
+      const byTeam = {};
+      assets.forEach(a => { const t = a.team || 'A'; byTeam[t] = (byTeam[t] || 0) + a.value; });
+      const winnerTeam = Object.keys(byTeam).sort((a, b) => byTeam[b] - byTeam[a])[0];
+      this.state.winnerTeam = winnerTeam;
+      const rep = alive.find(p => (p.team || 'A') === winnerTeam);
+      this.state.winner = rep ? rep.id : null;
+      this.addLog('回合结束，' + winnerTeam + ' 队以总资产 ¥' + byTeam[winnerTeam] + ' 获胜！');
+      this._recordStats();
+      return;
+    }
     this.state.winner = assets[0] ? assets[0].id : null;
     if (assets[0]) this.addLog('回合结束，' + this.state.players.find(p => p.id === assets[0].id).name + ' 以总资产 ¥' + assets[0].value + ' 获胜！');
     this._recordStats();

@@ -351,6 +351,10 @@ function drawLeaderboard(state, topY) {
         value += (state.tileHouses[t.id] || 0) * (GROUPS[t.group] ? GROUPS[t.group].houseCost : 100);
       }
     });
+    // 股票市值计入总资产
+    if (p.stocks && state.stocks) {
+      state.stocks.forEach((s) => { value += (p.stocks[s.id] || 0) * s.price; });
+    }
     return { id: p.id, name: p.name, color: p.color, value, bankrupt: p.bankrupt };
   });
   assets.sort((a, b) => b.value - a.value);
