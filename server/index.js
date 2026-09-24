@@ -263,6 +263,21 @@ wss.on('connection', (ws) => {
       return;
     }
 
+    // 主动离开房间（退出登录 / 回大厅）：解绑连接并回收空房间
+    if (msg.type === 'leave_room') {
+      if (room && playerId) {
+        if (isSpectator) room.removeSpectator(playerId);
+        else room.removePlayer(playerId);
+        if (room.players.size === 0 && !room.started && roomCode) rooms.delete(roomCode);
+      }
+      playerId = null;
+      isSpectator = false;
+      room = null;
+      roomCode = null;
+      ws.send(JSON.stringify({ type: 'left_room' }));
+      return;
+    }
+
     if (!playerId) { sendError('请先加入房间'); return; }
     if (isSpectator) return;
 

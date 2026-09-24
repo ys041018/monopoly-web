@@ -107,6 +107,12 @@ export class GameRoom {
       const nextHuman = [...this.players.values()].find(p => !p.isAI);
       if (nextHuman) nextHuman.isHost = true;
     }
+
+    // 大厅里最后一个真人离开时，连机器人一起清掉
+    // 否则会残留一间“只有机器人、但仍在 rooms 里”的房间，房主重连时会被拉回去
+    if (!this.started && ![...this.players.values()].some(p => !p.isAI)) {
+      this.players.clear();
+    }
     this.broadcastPlayerList();
   }
 

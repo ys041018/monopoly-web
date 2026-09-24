@@ -119,9 +119,14 @@ authRegisterBtn.addEventListener('click', () => {
 });
 authLogoutBtn.addEventListener('click', () => {
   if (authToken) ws.send(JSON.stringify({ type: 'logout', token: authToken }));
+  // 主动离开房间，否则下次登录/刷新会被自动拉回旧房间（含机器人）
+  ws.send(JSON.stringify({ type: 'leave_room' }));
   authToken = null; localStorage.removeItem('monopoly_token');
   sessionStorage.removeItem('monopoly_player_id');
   sessionStorage.removeItem('monopoly_player_name');
+  sessionStorage.removeItem('monopoly_room');
+  players = []; myId = null; state = null; entered = false; myIsHost = false;
+  if (roomInput) roomInput.value = '';
   authScreen.classList.remove('hidden');
   lobby.classList.add('hidden');
   game.classList.add('hidden');
@@ -237,6 +242,12 @@ ws.onmessage = (e) => {
       gotError = true;
       setMsg(msg.message, true);
       joinBtn.disabled = false;
+      // 记的房间已不存在：清掉本地存档，别让下次登录再撞一次
+      if (msg.message && msg.message.indexOf('房间不存在') >= 0) {
+        sessionStorage.removeItem('monopoly_room');
+        sessionStorage.removeItem('monopoly_player_id');
+        if (roomInput) roomInput.value = '';
+      }
       break;
   }
 };
