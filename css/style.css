@@ -301,3 +301,27 @@ body {
 .modal { background: rgba(0, 0, 0, 0.72); }
 .build-row { background: rgba(4, 26, 21, 0.7); }
 .panel label { background: rgba(4, 26, 21, 0.6); }
+
+/* ===== 素材应用：背景图 + 金色装饰边框 + Logo 图标 ===== */
+body {
+  background: url('../assets/bg-vault.svg') center / cover no-repeat fixed, #04120f;
+}
+.card, .game-wrap, .log-panel {
+  border-radius: 0;
+  border: 16px solid transparent;
+  border-image: url('../assets/card-frame.svg') 30 / 16px / 0 stretch;
+  background: linear-gradient(160deg, rgba(9, 48, 38, 0.96), rgba(5, 28, 23, 0.96));
+  background-clip: padding-box;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+.card { padding: 30px 32px; }
+.logo { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.logo-icon { width: 40px; height: 40px; flex: none; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.5)); }
+.side-card, .turn-card, .auth-panel, .auth-info, .room-settings {
+  border: 1px solid rgba(201, 162, 74, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(240, 214, 122, 0.10), 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+.modal-card, .card-popup-inner {
+  border: 2px solid rgba(201, 162, 74, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(240, 214, 122, 0.15), 0 24px 60px rgba(0, 0, 0, 0.6);
+}
