@@ -8,6 +8,15 @@ const EDGE = 72;
 const SIZE = CORNER * 2 + EDGE * 12;
 const GAP = 2;
 
+// 棋盘主题
+const BOARD_THEMES = {
+  classic: { paper: '#fdfefe', centerA: '#172231', centerB: '#0f1924', boardBg: '#0f1924' },
+  warm:    { paper: '#fff6e5', centerA: '#2a2016', centerB: '#1a130c', boardBg: '#241a11' },
+  cool:    { paper: '#eef6ff', centerA: '#122636', centerB: '#081722', boardBg: '#0b1c28' },
+};
+let boardTheme = BOARD_THEMES.classic;
+export function setBoardTheme(name) { boardTheme = BOARD_THEMES[name] || BOARD_THEMES.classic; }
+
 let canvas, ctx, dpr;
 
 const TYPE_GRAD = {
@@ -49,6 +58,7 @@ function tileRect(id) {
 export function render(state) {
   stateRef = state;
   const holder = document.getElementById('board');
+  holder.style.background = boardTheme.boardBg;
   if (!canvas) {
     canvas = document.createElement('canvas');
     holder.appendChild(canvas);
@@ -98,7 +108,7 @@ function drawProperty(id, tile, r, vertical, corner, state) {
   const owner = ownerId ? state.players.find(p => p.id === ownerId) : null;
 
   // 底色：统一白色（简洁）
-  ctx.fillStyle = '#fdfefe';
+  ctx.fillStyle = boardTheme.paper;
   roundRect(x, y, w, h, 6);
   ctx.fill();
 
@@ -199,8 +209,8 @@ function drawSpecial(id, tile, r, vertical, corner, state) {
 function drawCenter(state) {
   const x = CORNER, y = CORNER, w = SIZE - CORNER * 2, h = SIZE - CORNER * 2;
   const bg = ctx.createLinearGradient(x, y, x + w, y + h);
-  bg.addColorStop(0, '#172231');
-  bg.addColorStop(1, '#0f1924');
+  bg.addColorStop(0, boardTheme.centerA);
+  bg.addColorStop(1, boardTheme.centerB);
   ctx.fillStyle = bg;
   roundRect(x, y, w, h, 18);
   ctx.fill();

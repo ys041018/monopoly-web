@@ -1,7 +1,7 @@
 // ============================================================
 // 前端主逻辑：WebSocket + 大厅/游戏 + 回合操作 + 盖房/抵押/交易
 // ============================================================
-import { render, animateMove, animateDice, onTileClick } from './board2d.js';
+import { render, animateMove, animateDice, onTileClick, setBoardTheme } from './board2d.js';
 
 window.addEventListener('error', (e) => {
   const t = document.getElementById('turn-sub');
@@ -18,6 +18,8 @@ const lobby = $('lobby'), game = $('game');
 const nameInput = $('name-input'), roomInput = $('room-input'), joinBtn = $('join-btn'), startBtn = $('start-btn'), lobbyBtn = $('lobby-btn');
 const addAiBtn = $('add-ai-btn');
 const createRoomBtn = $('create-room-btn');
+const themeSelect = $('theme-select');
+const roomSettings = $('room-settings'), setMoney = $('set-money'), setRounds = $('set-rounds'), setHouse = $('set-house');
 const soundToggle = $('sound-toggle'), copyRoomBtn = $('copy-room-btn');
 const rollBtn = $('roll-btn'), buyBtn = $('buy-btn'), skipBuyBtn = $('skip-buy-btn'), endTurnBtn = $('end-turn-btn');
 const buildBtn = $('build-btn'), mortgageBtn = $('mortgage-btn'), tradeBtn = $('trade-btn');
@@ -39,6 +41,7 @@ let gotError = false, entered = false, animating = false;
 let lastSoundLog = null;
 let lastLogText = null;
 let prevLastCard = null;
+let roomSettingsData = null;
 let cardTimer = null;
 
 // ---------- 自动重连 ----------
@@ -97,6 +100,33 @@ tradeBtn.addEventListener('click', () => { toggle(tradePanel); if (!tradePanel.c
 
 function toggle(el) { el.classList.toggle('hidden'); }
 
+[setMoney, setRounds, setHouse].forEach(el => el && el.addEventListener('change', sendSettings));
+
+// ---------- 棋盘主题 ----------
+(function initTheme() {
+  const saved = localStorage.getItem('monopoly_theme') || 'classic';
+  if (themeSelect) themeSelect.value = saved;
+  setBoardTheme(saved);
+  if (themeSelect) themeSelect.addEventListener('change', () => {
+    setBoardTheme(themeSelect.value);
+    localStorage.setItem('monopoly_theme', themeSelect.value);
+    if (state) render(state);
+  });
+})();
+
+// ---------- 键盘快捷键 ----------
+document.addEventListener('keydown', (e) => {
+  const tag = (e.target && e.target.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  const shown = (el) => el && !el.classList.contains('hidden');
+  if (e.code === 'Space') { if (shown(rollBtn)) { e.preventDefault(); rollBtn.click(); } }
+  else if (e.key === 'b' || e.key === 'B') { if (shown(buyBtn)) buyBtn.click(); }
+  else if (e.key === 'e' || e.key === 'E') { if (shown(endTurnBtn)) endTurnBtn.click(); }
+  else if (e.key === 'm' || e.key === 'M') { if (shown(mortgageBtn)) mortgageBtn.click(); }
+  else if (e.key === 't' || e.key === 'T') { if (shown(tradeBtn)) tradeBtn.click(); }
+  else if (e.key === 'g' || e.key === 'G') { if (shown(buildBtn)) buildBtn.click(); }
+});
+
 // ---------- 接收 ----------
 ws.onopen = () => setMsg('已连接服务器');
 ws.onclose = () => { if (!gotError) setMsg('连接已断开，请刷新页面', true); };
@@ -127,7 +157,9 @@ ws.onmessage = (e) => {
       break;
     case 'player_list':
       players = msg.players;
+      if (msg.settings) roomSettingsData = msg.settings;
       renderPlayers();
+      renderRoomSettings();
       updateStartBtn(msg.canStart);
       break;
     case 'game_state':
@@ -572,6 +604,22 @@ function renderPlayers() {
     li2.innerHTML = `<span class="dot" style="background:${p.color}"></span><span class="p-name">${escapeHtml(p.name)}</span>${sp && sp.bankrupt ? '<span class="tag">破产</span>' : ''}${isCur ? '<span class="tag turn">回合中</span>' : ''}<span class="p-money">¥${sp ? sp.money : 1500}</span>`;
     gamePlayerList.appendChild(li2);
   });
+}
+
+function renderRoomSettings() {
+  if (!roomSettings) return;
+  const show = myIsHost && !state;
+  roomSettings.classList.toggle('hidden', !show);
+  if (!roomSettingsData) return;
+  setMoney.value = String(roomSettingsData.startMoney);
+  setRounds.value = String(roomSettingsData.maxRounds);
+  setHouse.value = String(roomSettingsData.houseMultiplier);
+}
+
+function sendSettings() {
+  ws.send(JSON.stringify({ type: 'update_settings', settings: {
+    startMoney: Number(setMoney.value), maxRounds: Number(setRounds.value), houseMultiplier: Number(setHouse.value),
+  } }));
 }
 
 function updateStartBtn(canStart) {

@@ -105,6 +105,11 @@ wss.on('connection', (ws) => {
     if (isSpectator) return;
 
     switch (msg.type) {
+      case 'update_settings': {
+        const r = room.updateSettings(playerId, msg.settings);
+        if (r.error) room.sendError(ws, r.error);
+        break;
+      }
       case 'add_ai': {
         const r = room.addAI(playerId);
         if (r.error) room.sendError(ws, r.error);

@@ -23,6 +23,19 @@ export class GameRoom {
     this.state = null;
     this._auctionTimer = null;
     this._turnTimer = null;
+    this.settings = { startMoney: START_MONEY, maxRounds: DEFAULT_MAX_ROUNDS, houseMultiplier: 1 };
+  }
+
+  updateSettings(playerId, settings) {
+    const host = this.players.get(playerId);
+    if (!host || !host.isHost) return { error: '只有房主可以修改设置' };
+    if (this.started) return { error: '游戏已开始' };
+    const v = settings || {};
+    if (v.startMoney != null) this.settings.startMoney = Math.max(500, Math.min(10000, Math.floor(Number(v.startMoney)) || START_MONEY));
+    if (v.maxRounds != null) this.settings.maxRounds = Math.max(10, Math.min(200, Math.floor(Number(v.maxRounds)) || DEFAULT_MAX_ROUNDS));
+    if (v.houseMultiplier != null) this.settings.houseMultiplier = Math.max(0.5, Math.min(3, Number(v.houseMultiplier) || 1));
+    this.broadcastPlayerList();
+    return { ok: true };
   }
 
   addPlayer(ws, name, playerId) {
@@ -95,7 +108,7 @@ export class GameRoom {
     this.started = true;
     const players = [...this.players.values()].map(p => ({
       id: p.id, name: p.name, color: p.color, isHost: p.isHost, isAI: !!p.isAI,
-      position: 0, money: START_MONEY, inJail: false, jailedTurns: 0, outOfJailCards: 0, rest: false, bankrupt: false,
+      position: 0, money: this.settings.startMoney, inJail: false, jailedTurns: 0, outOfJailCards: 0, rest: false, bankrupt: false,
     }));
 
     this.state = {
@@ -114,6 +127,8 @@ export class GameRoom {
       pendingTile: null,
       lastMove: null,
       turnDeadline: null,
+      maxRounds: this.settings.maxRounds,
+      houseMultiplier: this.settings.houseMultiplier,
       log: ['游戏开始！'],
     };
 
@@ -394,7 +409,7 @@ export class GameRoom {
     if (curHouses > minHouses) return { error: '需要均匀盖房（先给房子少的地盖）' };
     if (curHouses >= HOTEL_LEVEL) return { error: '已建成旅馆，不能再盖' };
 
-    const cost = getHouseCost(tile.group);
+    const cost = Math.round(getHouseCost(tile.group) * (this.state.houseMultiplier || 1));
     if (cur.money < cost) return { error: '现金不足，无法盖房' };
 
     cur.money -= cost;
@@ -535,7 +550,7 @@ export class GameRoom {
       break;
     } while (guard++ < n * 2);
 
-    if (this.state.round > DEFAULT_MAX_ROUNDS) { this.settleByAssets(); return; }
+    if (this.state.round > (this.state.maxRounds || DEFAULT_MAX_ROUNDS)) { this.settleByAssets(); return; }
 
     this.state.phase = 'rolling';
     this.state.pendingTile = null;
@@ -673,7 +688,7 @@ export class GameRoom {
     const groupTiles = TILES.filter(t => t.type === 'property' && t.group === tile.group);
     const maxH = Math.max(...groupTiles.map(t => this.state.tileHouses[t.id] || 0));
     if (houses < maxH) return { error: '需要均匀拆除（先拆房子多的地）' };
-    const refund = Math.floor(getHouseCost(tile.group) / 2);
+    const refund = Math.floor(getHouseCost(tile.group) * (this.state.houseMultiplier || 1) / 2);
     cur.money += refund;
     this.state.tileHouses[tileId] = houses - 1;
     this.addLog(cur.name + ' 将「' + tile.name + '」的房屋半价卖给银行，+¥' + refund);
@@ -900,6 +915,7 @@ export class GameRoom {
     this.broadcast(JSON.stringify({
       type: 'player_list', players,
       canStart: this.players.size >= MIN_PLAYERS, started: this.started,
+      settings: this.settings,
     }));
   }
 
