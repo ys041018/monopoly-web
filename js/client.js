@@ -35,7 +35,7 @@ const lobbyMsg = $('lobby-msg'), playerList = $('player-list'), playerCount = $(
 const gamePlayerList = $('game-player-list'), gamePlayerCount = $('game-player-count');
 const logList = $('log-list'), turnTitle = $('turn-title'), turnSub = $('turn-sub');
 const deedModal = $('deed-modal'), deedContent = $('deed-content'), deedClose = $('deed-close');
-const cardPopup = $('card-popup'), cardPopupTitle = $('card-popup-title'), cardPopupText = $('card-popup-text');
+const cardPopup = $('card-popup'), cardPopupInner = $('card-popup-inner'), cardPopupTitle = $('card-popup-title'), cardPopupText = $('card-popup-text');
 
 const DICE_FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
@@ -823,6 +823,7 @@ function detectCard() {
 
 function showCard(card) {
   const isChance = card.type === 'chance';
+  if (cardPopupInner) cardPopupInner.style.backgroundImage = "url('assets/" + (isChance ? 'card-chance.jpg' : 'card-chest.jpg') + "')";
   cardPopupTitle.textContent = isChance ? '❓ 机会' : '🍀 命运';
   cardPopupTitle.style.color = isChance ? '#FFB74D' : '#4DB6AC';
   cardPopupText.textContent = card.text;
