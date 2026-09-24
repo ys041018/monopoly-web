@@ -304,7 +304,7 @@ body {
 
 /* ===== 素材应用：背景图 + 金色装饰边框 + Logo 图标 ===== */
 body {
-  background: url('../assets/bg-vault.svg') center / cover no-repeat fixed, #04120f;
+  background: url('../assets/bg-vault.jpg') center / cover no-repeat fixed, #04120f;
 }
 .card, .game-wrap, .log-panel {
   border-radius: 0;
@@ -325,3 +325,19 @@ body {
   border: 2px solid rgba(201, 162, 74, 0.7);
   box-shadow: inset 0 0 0 1px rgba(240, 214, 122, 0.15), 0 24px 60px rgba(0, 0, 0, 0.6);
 }
+
+/* ===== 金币装饰素材 ===== */
+.lobby-card { position: relative; }
+.lobby-card::after {
+  content: '';
+  position: absolute;
+  right: -76px;
+  bottom: -54px;
+  width: 250px;
+  height: 174px;
+  background: url('../assets/coins.png') center / contain no-repeat;
+  pointer-events: none;
+  opacity: 0.95;
+  filter: drop-shadow(0 14px 26px rgba(0, 0, 0, 0.55));
+}
+@media (max-width: 1100px) { .lobby-card::after { display: none; } }
