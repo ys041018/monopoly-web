@@ -354,7 +354,9 @@ export class GameRoom {
     }
 
     this.state.dice = [d1, d2];
-    this.state.lastMove = { playerIndex: this.state.current, from, to: cur.position, dice: [d1, d2] };
+    // seq：让前端能判断"这是新的一次移动"，同一回合内的买地/抵押/股市操作不再重放动画
+    this.state.moveSeq = (this.state.moveSeq || 0) + 1;
+    this.state.lastMove = { seq: this.state.moveSeq, playerIndex: this.state.current, from, to: cur.position, dice: [d1, d2] };
     this.addLog(logMsg);
 
     if (cur.money < 0) {
@@ -633,7 +635,7 @@ export class GameRoom {
     if (!this.state || !this.state.stocks) return { error: '游戏未开始' };
     const cur = this.state.players[this.state.current];
     if (!cur || cur.id !== playerId) return { error: '还没轮到你' };
-    if (this.state.phase !== 'rolling' && this.state.phase !== 'after_move') return { error: '只能在自己回合买卖股票' };
+    if (!['rolling', 'buying', 'after_move'].includes(this.state.phase)) return { error: '只能在自己回合买卖股票' };
     const stock = this.state.stocks.find(s => s.id === stockId);
     if (!stock) return { error: '没有这支股票' };
     return { cur, stock };

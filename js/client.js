@@ -45,6 +45,7 @@ let authToken = localStorage.getItem('monopoly_token') || null;
 if (localStorage.getItem('monopoly_sound') === '0') { setSoundEnabled(false); }
 let players = [], state = null;
 let gotError = false, entered = false, animating = false;
+let animatedMoveSeq = null;   // 已播放过的移动 seq，用于避免重复播放
 let lastSoundLog = null;
 let lastLogText = null;
 let prevLastCard = null;
@@ -257,14 +258,24 @@ function enterGame() {
   lobby.classList.add('hidden');
   game.classList.remove('hidden');
   tradePanel.classList.add('hidden');
+  animatedMoveSeq = moveKey(state.lastMove);   // 进入/重连直接呈现当前局面，不重放本回合移动
   lastSoundLog = state.log && state.log.length ? state.log[state.log.length - 1] : null;
   render(state);
   refresh();
 }
 
+// 同一回合内买地/抵押/股市/交易都会广播新 state，用 seq 区分是否是新的一次移动
+function moveKey(lm) {
+  if (!lm) return null;
+  if (lm.seq != null) return 'seq:' + lm.seq;
+  return 'k:' + lm.playerIndex + ':' + lm.from + ':' + lm.to + ':' + (lm.dice ? lm.dice.join('-') : '') + ':' + state.round;
+}
+
 function syncGame() {
   const lm = state.lastMove;
-  if (lm && !animating) {
+  const key = moveKey(lm);
+  if (lm && key !== animatedMoveSeq && !animating) {
+    animatedMoveSeq = key;
     animating = true;
     hideAllActions();
     render(state);
