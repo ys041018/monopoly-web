@@ -26,6 +26,7 @@ let boardTheme = BOARD_THEMES.classic;
 export function setBoardTheme(name) { boardTheme = BOARD_THEMES[name] || BOARD_THEMES.classic; }
 
 let canvas, ctx, dpr;
+let lastSizeKey = '';
 
 const TYPE_GRAD = {
   go:          ['#FF7043', '#E64A19'],
@@ -76,9 +77,11 @@ export function render(state) {
   dpr = dpr || (window.devicePixelRatio || 1);
   const cssW = holder.clientWidth || SIZE;
   const scale = cssW / SIZE;
-  if (canvas.width !== Math.round(cssW * dpr)) {
+  const sizeKey = Math.round(cssW) + '|' + SIZE + '|' + dpr;
+  if (sizeKey !== lastSizeKey) {
+    lastSizeKey = sizeKey;
     canvas.width = Math.round(cssW * dpr);
-    canvas.height = Math.round(cssW * SIZE / SIZE * dpr);
+    canvas.height = Math.round(cssW * dpr);
     canvas.style.width = '100%';
     canvas.style.height = '100%';
     ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
