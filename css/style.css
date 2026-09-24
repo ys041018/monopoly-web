@@ -450,3 +450,31 @@ body {
 @media (max-width: 1280px) {
   .lobby-card::before, .lobby-card::after { display: none; }
 }
+
+/* ===== 卡牌文字可读性（最终版） ===== */
+.card-popup-inner::before {
+  background: radial-gradient(circle at 50% 50%, rgba(3, 18, 14, 0.45), rgba(1, 8, 6, 0.68));
+}
+.card-popup-title {
+  font-size: 26px;
+  font-weight: 900;
+  color: #ffe9a8;
+  background: rgba(2, 14, 11, 0.9);
+  border: 1px solid rgba(201, 162, 74, 0.7);
+  padding: 6px 18px;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.95);
+}
+.card-popup-text {
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffffff;
+  background: rgba(2, 14, 11, 0.9);
+  border: 1px solid rgba(201, 162, 74, 0.45);
+  padding: 10px 16px;
+  border-radius: 10px;
+  max-width: 270px;
+  line-height: 1.45;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.95);
+}

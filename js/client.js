@@ -825,7 +825,6 @@ function showCard(card) {
   const isChance = card.type === 'chance';
   if (cardPopupInner) cardPopupInner.style.backgroundImage = "url('assets/" + (isChance ? 'card-chance.jpg' : 'card-chest.jpg') + "')";
   cardPopupTitle.textContent = isChance ? '❓ 机会' : '🍀 命运';
-  cardPopupTitle.style.color = isChance ? '#FFB74D' : '#4DB6AC';
   cardPopupText.textContent = card.text;
   cardPopup.classList.remove('hidden');
   if (cardTimer) clearTimeout(cardTimer);
