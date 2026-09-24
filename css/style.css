@@ -60,6 +60,8 @@ input,select,button,textarea{font-family:inherit;font-weight:700;}
 .screen{display:flex;align-items:center;justify-content:center;height:100vh;padding:10px;overflow:hidden;}
 .hidden{display:none !important;}
 
+
+
 /* ---------- 地图专属页面背景（跟随所选地图） ---------- */
 body[data-map="mini"]{
   background-color:#e9f7d9;
@@ -373,4 +375,81 @@ select,.theme-select{cursor:pointer;}
   .logo{font-size:28px;}
   .btn{padding:10px 15px;font-size:14px;}
   .join-row{gap:8px;}
+}
+
+/* ============================================================
+   移动端优化
+   核心问题：手机上一屏放不下"棋盘 + 操作区"，玩家点按钮时看不到棋盘。
+   思路：棋盘尽量放大 + 操作区吸附在底部（滚动时始终可点）+ 日志压缩
+   ============================================================ */
+button, .btn, .qty-btn, .sound-toggle { touch-action: manipulation; }
+* { -webkit-tap-highlight-color: transparent; }
+
+@media (max-width: 980px) {
+  .screen { height: 100dvh; }
+  .game-wrap { padding: 8px; gap: 10px; border-radius: 24px; }
+  #board { width: min(100vw - 18px, 76vh); border-radius: 20px; }
+
+  .side { width: 100%; overflow: visible; gap: 10px; }
+
+  /* 操作区固定在屏幕底部：棋盘在屏幕上方、按钮在下方，两者同时可见；
+     面板展开时操作区内部滚动，不会盖住棋盘 */
+  .action-btns {
+    position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 30;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    max-height: 46vh; overflow-y: auto;
+    background: var(--paper); border: 3px solid var(--ink); border-radius: 20px;
+    padding: 10px; box-shadow: 0 6px 0 rgba(47, 50, 101, .5);
+  }
+  /* 给底部固定操作栏留出空间 */
+  #game { padding-bottom: 200px; }
+  /* 操作区脱离文档流后，原来包着它的卡片会变成一个空壳，抹掉它的外观 */
+  .side-card:has(> .action-btns) { background: transparent; border: none; box-shadow: none; padding: 0; }
+  .action-btns > .panel,
+  .action-btns > .build-panel,
+  .action-btns > #waiting-tip,
+  .action-btns > #trade-offer { grid-column: 1 / -1; }
+  /* 主操作占满整行 */
+  #roll-btn, #buy-btn, #end-turn-btn, #skip-buy-btn, #bail-btn, #jailcard-btn { grid-column: 1 / -1; }
+  .action-btns .btn { padding: 12px 10px; font-size: 14px; }
+
+  .turn-card { padding: 12px 14px; border-radius: 20px; }
+  .turn-title { font-size: 19px; }
+  .turn-sub { font-size: 12.5px; }
+  .dice-display { font-size: 32px; letter-spacing: 6px; min-height: 40px; }
+
+  .side-card { padding: 11px 13px; border-radius: 20px; }
+  .player-list li { font-size: 13px; padding: 7px 10px; }
+
+  .log-panel { width: 100%; max-height: 150px; padding: 12px; }
+  .log-list { font-size: 12.5px; gap: 5px; }
+  .log-list li { padding: 5px 8px; }
+
+  .panel, .build-panel { max-height: 34vh; }
+  .sound-toggle { width: 34px; height: 34px; font-size: 16px; opacity: .92; }
+}
+
+/* 手机横屏：左右布局（棋盘在左，操作在右），日志换行到下方 */
+@media (max-width: 980px) and (orientation: landscape) {
+  .game-wrap { flex-direction: row; align-items: flex-start; flex-wrap: wrap; }
+  #board { width: min(52vw, 100dvh - 24px); align-self: flex-start; position: relative; }
+  .side { width: 44vw; }
+  .log-panel { width: 100%; max-height: 100px; order: 3; }
+  /* 横屏纵向空间小：操作区回文档流 + 压缩按钮，避免文字换行 */
+  .action-btns { position: static; max-height: none; overflow: visible; grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px; }
+  .action-btns .btn { padding: 9px 8px; font-size: 12.5px; }
+  .side-card:has(> .action-btns) { background: var(--paper); border: 3px solid var(--ink); box-shadow: 0 5px 0 rgba(47,50,101,.28); padding: 10px; }
+  .turn-card { padding: 10px 12px; }
+  .turn-title { font-size: 16px; }
+  .turn-sub { font-size: 12px; }
+  .dice-display { font-size: 24px; letter-spacing: 4px; min-height: 30px; }
+  #game { padding-bottom: 8px; }
+  .player-list li { padding: 6px 9px; font-size: 12.5px; }
+  .panel, .build-panel { max-height: 30vh; }
+}
+
+/* 超窄屏（小屏手机）：操作区两列改单列，避免按钮过窄 */
+@media (max-width: 380px) {
+  .action-btns { grid-template-columns: 1fr; }
+  #board { width: min(100vw - 14px, 72vh); }
 }
