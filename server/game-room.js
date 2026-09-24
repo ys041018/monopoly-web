@@ -63,7 +63,8 @@ export class GameRoom {
     const color = PLAYER_COLORS.find(c => !used.has(c)) || PLAYER_COLORS[0];
 
     const id = uid();
-    const player = { ws, id, name: cleanName, color, isHost: this.players.size === 0, userId: userId || null };
+    const hasHumanHost = [...this.players.values()].some(p => p.isHost && !p.isAI && p.ws && p.ws.readyState === 1);
+    const player = { ws, id, name: cleanName, color, isHost: !hasHumanHost, userId: userId || null };
     this.players.set(id, player);
     this.broadcastPlayerList();
     return { id, player: { id, name: cleanName, color, isHost: player.isHost } };
@@ -95,8 +96,9 @@ export class GameRoom {
       }
     }
 
-    if (player.isHost && this.players.size > 0) {
-      this.players.values().next().value.isHost = true;
+    if (player.isHost) {
+      const nextHuman = [...this.players.values()].find(p => !p.isAI);
+      if (nextHuman) nextHuman.isHost = true;
     }
     this.broadcastPlayerList();
   }
@@ -582,7 +584,7 @@ export class GameRoom {
     const used = new Set([...this.players.values()].map(p => p.color));
     const color = PLAYER_COLORS.find(c => !used.has(c)) || PLAYER_COLORS[0];
     const id = uid();
-    const player = { ws: null, id, name: cleanName, color, isHost: this.players.size === 0, isAI: true };
+    const player = { ws: null, id, name: cleanName, color, isHost: false, isAI: true };
     this.players.set(id, player);
     this.broadcastPlayerList();
     return { ok: true };
