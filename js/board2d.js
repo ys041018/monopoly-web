@@ -14,27 +14,86 @@ export function setActiveMap(id) {
   activeMap = getMap(id);
   PER_SIDE = activeMap.perSide;
   SIZE = CORNER * 2 + EDGE * PER_SIDE;
+  applySkin();                                                                    // 换地图 = 换画面风格
+  if (typeof document !== "undefined") document.body.dataset.map = activeMap.id;  // 页面背景同步切换
 }
 
-// 棋盘主题
-const BOARD_THEMES = {
-  candy:  { paper: '#fffdf8', centerA: '#fff8e0', centerB: '#ffe4ab', boardBg: '#d9f2ff' },
-  sakura: { paper: '#fffafc', centerA: '#ffe0ee', centerB: '#ffb9d6', boardBg: '#ffe6f0' },
-  mint:   { paper: '#f9fffb', centerA: '#d3f7e5', centerB: '#a3ebc6', boardBg: '#ddf8ec' },
-  sky:    { paper: '#f8fcff', centerA: '#d6ecff', centerB: '#a8d6ff', boardBg: '#e6f4ff' },
+// ---------- 地图皮肤 ----------
+// 换地图 = 换画面：配色 / 描边 / 格子文字 / 中心面板 / 装饰图标 都由地图决定
+const SKINS = {
+  candy: {
+    ink: '#2f3265', label: '#4d5288', paper: '#fffdf8', tileText: '#2f3265',
+    centerA: '#fff8e0', centerB: '#ffe4ab', boardBg: '#d9f2ff',
+    titleA: '#ffb84d', titleB: '#ff9f43', blob: 'rgba(255,255,255,0.85)',
+    cardBg: '#ffffff', cardBgTop: '#fff6d0', cardText: '#2f3265', centerText: '#2f3265',
+    dots: ['#ff6b6b', '#ffd23f', '#45d07a', '#46b5f5', '#a274ff', '#ff7ab8'], icons: [],
+  },
+  sky: {
+    ink: '#274b7a', label: '#4a6f9e', paper: '#f8fcff', tileText: '#274b7a',
+    centerA: '#e6f3ff', centerB: '#c2e0ff', boardBg: '#e6f4ff',
+    titleA: '#7cc4ff', titleB: '#3a8fd6', blob: 'rgba(255,255,255,0.9)',
+    cardBg: '#ffffff', cardBgTop: '#e9f4ff', cardText: '#274b7a', centerText: '#274b7a',
+    dots: ['#3a8fd6', '#7cc4ff', '#ffd166', '#ff8fab'], icons: [],
+  },
+  sakura: {
+    ink: '#7a3f5c', label: '#9c6a83', paper: '#fffafc', tileText: '#7a3f5c',
+    centerA: '#ffeef5', centerB: '#ffd0e2', boardBg: '#ffe6f0',
+    titleA: '#ff9ec7', titleB: '#e5679f', blob: 'rgba(255,255,255,0.9)',
+    cardBg: '#ffffff', cardBgTop: '#ffeef5', cardText: '#7a3f5c', centerText: '#7a3f5c',
+    dots: ['#ff9ec7', '#ffd6e7', '#c1a3ff', '#ffe066'], icons: [],
+  },
+  mint: {
+    ink: '#1f5f4b', label: '#3f7f69', paper: '#f9fffb', tileText: '#1f5f4b',
+    centerA: '#e6fbf1', centerB: '#c2f0dd', boardBg: '#ddf8ec',
+    titleA: '#63d7a5', titleB: '#29a97a', blob: 'rgba(255,255,255,0.9)',
+    cardBg: '#ffffff', cardBgTop: '#e6fbf1', cardText: '#1f5f4b', centerText: '#1f5f4b',
+    dots: ['#29a97a', '#63d7a5', '#ffd166', '#7cc4ff'], icons: [],
+  },
+  // 迷你小镇：奶油纸面 + 草绿描边 + 田园图标
+  town: {
+    ink: '#3a5a40', label: '#5c7a5f', paper: '#fffdf2', tileText: '#3a5a40',
+    centerA: '#f6ffe6', centerB: '#dcf6bd', boardBg: '#e9f7d9',
+    titleA: '#9bd85c', titleB: '#5aa832', blob: 'rgba(255,255,255,0.7)',
+    cardBg: '#ffffff', cardBgTop: '#f2ffdd', cardText: '#3a5a40', centerText: '#3a5a40',
+    dots: ['#7ac74f', '#f2c14e', '#ff9f68', '#8ecae6'], icons: ['🌳', '🏡', '🌻'],
+  },
+  // 都市：冷灰蓝 + 霓虹橙点缀 + 楼宇图标
+  city: {
+    ink: '#2b3446', label: '#5a6478', paper: '#f6f8fc', tileText: '#2b3446',
+    centerA: '#eaf1fb', centerB: '#cddcf1', boardBg: '#dfe8f5',
+    titleA: '#ffc247', titleB: '#fb8500', blob: 'rgba(255,255,255,0.8)',
+    cardBg: '#ffffff', cardBgTop: '#eaf1fb', cardText: '#2b3446', centerText: '#2b3446',
+    dots: ['#fb8500', '#219ebc', '#8ecae6', '#023047'], icons: ['🏙️', '🚕', '🏢'],
+  },
+  // 星际：深空底 + 霓虹描边 + 星体图标（唯一暗色皮肤）
+  space: {
+    ink: '#8be9ff', label: '#b7c8ff', paper: '#161d3d', tileText: '#eaf2ff',
+    centerA: '#1b2350', centerB: '#0d1330', boardBg: '#070b1c',
+    titleA: '#7cf7ff', titleB: '#b48cff', blob: 'rgba(160,190,255,0.16)',
+    cardBg: '#1d2450', cardBgTop: '#2b3568', cardText: '#eaf2ff', centerText: '#eaf2ff',
+    dots: ['#7cf7ff', '#b48cff', '#ffd166', '#ff7ab8'], icons: ['⭐', '🪐', '🚀'],
+  },
 };
-// 兼容旧主题名（本地存档里可能还是旧值）
-BOARD_THEMES.emerald = BOARD_THEMES.candy;
-BOARD_THEMES.classic = BOARD_THEMES.sky;
-BOARD_THEMES.warm = BOARD_THEMES.sakura;
-BOARD_THEMES.cool = BOARD_THEMES.mint;
 
-// 卡通风格统一描边色
-const INK = '#2f3265';
-const INK_LABEL = '#4d5288';
-const INK_SOFT = 'rgba(47,50,101,0.32)';
-let boardTheme = BOARD_THEMES.candy;
-export function setBoardTheme(name) { boardTheme = BOARD_THEMES[name] || BOARD_THEMES.candy; }
+// 主题下拉可手动覆盖；auto = 跟随地图皮肤
+const BOARD_THEMES = {
+  candy: SKINS.candy, sky: SKINS.sky, sakura: SKINS.sakura, mint: SKINS.mint,
+};
+BOARD_THEMES.emerald = SKINS.candy;
+BOARD_THEMES.classic = SKINS.sky;
+BOARD_THEMES.warm = SKINS.sakura;
+BOARD_THEMES.cool = SKINS.mint;
+BOARD_THEMES.town = SKINS.town;
+BOARD_THEMES.city = SKINS.city;
+BOARD_THEMES.space = SKINS.space;
+
+const MAP_SKINS = {
+  standard: 'candy', classic: 'sky', mini: 'town', metro: 'city', space: 'space',
+};
+
+const INK_FALLBACK = '#2f3265';
+let manualTheme = null;                 // null = 跟随地图
+let boardTheme = SKINS.candy;
 
 // 描边圆角矩形（卡通粗线条）
 function strokeRound(x, y, w, h, r, color, lw) {
@@ -42,6 +101,26 @@ function strokeRound(x, y, w, h, r, color, lw) {
   ctx.strokeStyle = color;
   ctx.lineWidth = lw;
   ctx.stroke();
+}
+
+function mapSkin() { return SKINS[MAP_SKINS[activeMap.id]] || SKINS.candy; }
+function applySkin() { boardTheme = manualTheme || mapSkin(); }
+function inkColor() { return boardTheme.ink || INK_FALLBACK; }
+function inkSoftColor(alpha) {
+  const hex = (boardTheme.ink || INK_FALLBACK).replace('#', '');
+  const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
+  return 'rgba(' + r + ',' + g + ',' + b + ',' + (alpha == null ? 0.3 : alpha) + ')';
+}
+function tileTextColor() { return boardTheme.tileText || inkColor(); }
+function cardTextColor() { return boardTheme.cardText || inkColor(); }
+function skinDots() { return boardTheme.dots || SKINS.candy.dots; }
+function skinBlob() { return boardTheme.blob || 'rgba(255,255,255,0.85)'; }
+function skinIcons() { return boardTheme.icons || []; }
+
+export function setBoardTheme(name) {
+  if (!name || name === 'auto') { manualTheme = null; applySkin(); return; }
+  manualTheme = BOARD_THEMES[name] || null;
+  applySkin();
 }
 
 let canvas, ctx, dpr;
@@ -141,7 +220,7 @@ function drawProperty(id, tile, r, vertical, corner, state) {
   ctx.fillStyle = boardTheme.paper;
   roundRect(x, y, w, h, 10);
   ctx.fill();
-  strokeRound(x, y, w, h, 10, INK, 3);
+  strokeRound(x, y, w, h, 10, inkColor(), 3);
 
   // 组色条（保留地产色组，便于判断齐色）
   const band = vertical ? { x, y, w, h: h * 0.27 } : { x, y, w: w * 0.27, h };
@@ -151,7 +230,7 @@ function drawProperty(id, tile, r, vertical, corner, state) {
   ctx.fillStyle = bg;
   roundRect(band.x, band.y, band.w, band.h, 8);
   ctx.fill();
-  strokeRound(band.x, band.y, band.w, band.h, 8, INK, 2.5);
+  strokeRound(band.x, band.y, band.w, band.h, 8, inkColor(), 2.5);
 
   if (!owner) {
     drawIcon('🏠', band.x + band.w / 2, band.y + band.h / 2, corner ? 26 : 16);
@@ -159,11 +238,11 @@ function drawProperty(id, tile, r, vertical, corner, state) {
 
   // 名字
   if (corner) {
-    drawText(tile.name, r.x + r.w / 2, r.y + r.h * 0.62, 18, INK);
+    drawText(tile.name, r.x + r.w / 2, r.y + r.h * 0.62, 18, tileTextColor());
   } else if (vertical) {
-    drawVerticalText(tile.name, r.x + r.w / 2, r.y + r.h * 0.31, r.y + r.h * 0.83, 16, INK);
+    drawVerticalText(tile.name, r.x + r.w / 2, r.y + r.h * 0.31, r.y + r.h * 0.83, 16, tileTextColor());
   } else {
-    drawText(tile.name, band.x + band.w + (r.w - band.w) / 2, r.y + r.h * 0.44, 13, INK);
+    drawText(tile.name, band.x + band.w + (r.w - band.w) / 2, r.y + r.h * 0.44, 13, tileTextColor());
   }
 
   // 价格徽章
@@ -174,7 +253,7 @@ function drawProperty(id, tile, r, vertical, corner, state) {
   ctx.fillStyle = g.color;
   roundRect(bx, by, badgeW, badgeH, 10);
   ctx.fill();
-  strokeRound(bx, by, badgeW, badgeH, 10, INK, 2);
+  strokeRound(bx, by, badgeW, badgeH, 10, inkColor(), 2);
   drawText(price, bx + badgeW / 2, by + badgeH / 2 + 0.5, 12.5, '#fff', 'center', 'bold');
 
   // 建筑：绿色小洋房（1-4 房），5 级进化为豪华旅馆
@@ -205,7 +284,7 @@ function drawSpecial(id, tile, r, vertical, corner, state) {
   ctx.fillStyle = bg;
   roundRect(x, y, w, h, 10);
   ctx.fill();
-  strokeRound(x, y, w, h, 10, INK, 3);
+  strokeRound(x, y, w, h, 10, inkColor(), 3);
 
   const hl = ctx.createLinearGradient(x, y, x, y + h * 0.45);
   hl.addColorStop(0, 'rgba(255,255,255,0.42)');
@@ -220,13 +299,13 @@ function drawSpecial(id, tile, r, vertical, corner, state) {
 
   if (corner) {
     drawIcon(icon, r.x + r.w / 2, r.y + r.h * 0.4, 30);
-    drawText(tile.name, r.x + r.w / 2, r.y + r.h * 0.71, 18, INK, 'center', 'bold');
+    drawText(tile.name, r.x + r.w / 2, r.y + r.h * 0.71, 18, tileTextColor(), 'center', 'bold');
   } else if (vertical) {
     drawIcon(icon, r.x + r.w / 2, r.y + r.h * 0.16, 18);
-    drawVerticalText(tile.name, r.x + r.w / 2, r.y + r.h * 0.34, r.y + r.h * 0.9, 15, INK);
+    drawVerticalText(tile.name, r.x + r.w / 2, r.y + r.h * 0.34, r.y + r.h * 0.9, 15, tileTextColor());
   } else {
     drawIcon(icon, r.x + r.w * 0.24, r.y + r.h / 2, 18);
-    drawText(tile.name, r.x + r.w * 0.58, r.y + r.h / 2, 13, INK, 'center', 'bold');
+    drawText(tile.name, r.x + r.w * 0.58, r.y + r.h / 2, 13, tileTextColor(), 'center', 'bold');
   }
 
   // 车站/公共事业归属：与地产一致的玩家徽章
@@ -246,44 +325,54 @@ function drawCenter(state) {
   ctx.fillStyle = bg;
   roundRect(x, y, w, h, 26);
   ctx.fill();
-  strokeRound(x, y, w, h, 26, INK, 5);
+  strokeRound(x, y, w, h, 26, inkColor(), 5);
   // 内圈虚线，贴纸感
   ctx.setLineDash([12, 9]);
-  strokeRound(x + 15, y + 15, w - 30, h - 30, 18, INK_SOFT, 2);
+  strokeRound(x + 15, y + 15, w - 30, h - 30, 18, inkSoftColor(), 2);
   ctx.setLineDash([]);
 
   const cx = SIZE / 2;
 
   // 卡通云朵 + 糖果圆点
   const cloud = (bx, by, s) => {
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillStyle = skinBlob();
     ctx.beginPath();
     ctx.arc(bx, by, s * 0.52, 0, Math.PI * 2);
     ctx.arc(bx + s * 0.5, by - s * 0.2, s * 0.4, 0, Math.PI * 2);
     ctx.arc(bx + s * 0.95, by, s * 0.48, 0, Math.PI * 2);
     ctx.fill();
   };
-  cloud(x + 74, y + 62, 46);
-  cloud(x + w - 168, y + 78, 38);
-  ['#ff6b6b', '#ffd23f', '#45d07a', '#46b5f5', '#a274ff', '#ff7ab8'].forEach((c, i, arr) => {
+  const icons = skinIcons();
+  if (icons.length) {
+    // 有主题图标的地图（小镇/都市/星际）用图标替代云朵
+    drawIcon(icons[0], cx - 200, y + 56, 42);
+    drawIcon(icons[1], cx + 200, y + 56, 42);
+    if (icons[2]) drawIcon(icons[2], x + 78, y + h - 46, 36);
+  } else {
+    cloud(x + 74, y + 62, 46);
+    cloud(x + w - 168, y + 78, 38);
+  }
+  skinDots().forEach((c, i, arr) => {
     const dx = (i - (arr.length - 1) / 2) * 30;
     ctx.beginPath();
     ctx.arc(cx + dx, y + h - 40, 9, 0, Math.PI * 2);
     ctx.fillStyle = c;
     ctx.fill();
-    ctx.strokeStyle = INK;
+    ctx.strokeStyle = inkColor();
     ctx.lineWidth = 2.5;
     ctx.stroke();
   });
 
   // 标题：粗描边漫画字
   const gold = ctx.createLinearGradient(cx - 100, 0, cx + 100, 0);
-  gold.addColorStop(0, '#ffb84d'); gold.addColorStop(0.5, '#fff3c4'); gold.addColorStop(1, '#ff9f43');
+  gold.addColorStop(0, boardTheme.titleA || '#ffb84d');
+  gold.addColorStop(0.5, '#fff3c4');
+  gold.addColorStop(1, boardTheme.titleB || '#ff9f43');
   ctx.font = '900 46px "Baloo 2", "Microsoft YaHei", system-ui, sans-serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';
   ctx.lineWidth = 11;
-  ctx.strokeStyle = INK;
+  ctx.strokeStyle = inkColor();
   ctx.strokeText('大富翁', cx, y + 52);
   ctx.fillStyle = gold;
   ctx.fillText('大富翁', cx, y + 52);
@@ -294,7 +383,7 @@ function drawCenter(state) {
     drawDice(cx - 60, y + 130, 84, d.d1);
     drawDice(cx + 60, y + 130, 84, d.d2);
   } else {
-    ctx.fillStyle = 'rgba(47,50,101,0.55)';
+    ctx.fillStyle = inkSoftColor(0.6);
     ctx.font = '800 16px "Baloo 2", "Microsoft YaHei", system-ui, sans-serif';
     ctx.fillText('点击「掷骰子」开始', cx, y + 130);
   }
@@ -303,12 +392,12 @@ function drawCenter(state) {
   if (state) {
     const cur = state.players[state.current];
     const cardW = 240, cardH = 44, ccx = cx - cardW / 2, ccy = y + 200;
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = boardTheme.cardBg || '#ffffff';
     roundRect(ccx, ccy, cardW, cardH, 16);
     ctx.fill();
-    strokeRound(ccx, ccy, cardW, cardH, 16, INK, 3);
+    strokeRound(ccx, ccy, cardW, cardH, 16, inkColor(), 3);
     drawToken(ccx + 26, ccy + cardH / 2, 10, cur.color);
-    ctx.fillStyle = INK;
+    ctx.fillStyle = cardTextColor();
     ctx.font = '800 16px "Baloo 2", "Microsoft YaHei", system-ui, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText('轮到：' + cur.name + ' · 第 ' + state.round + ' 回合', ccx + 46, ccy + cardH / 2 + 1);
@@ -319,10 +408,10 @@ function drawCenter(state) {
 }
 
 function drawDice(cx, cy, size, value) {
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = boardTheme.cardBg || '#ffffff';
   roundRect(cx - size / 2, cy - size / 2, size, size, size * 0.28);
   ctx.fill();
-  ctx.strokeStyle = INK;
+  ctx.strokeStyle = inkColor();
   ctx.lineWidth = 4;
   ctx.stroke();
   const positions = {
@@ -333,7 +422,7 @@ function drawDice(cx, cy, size, value) {
     5: [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]],
     6: [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]],
   };
-  ctx.fillStyle = INK;
+  ctx.fillStyle = inkColor();
   const r = size * 0.13;
   (positions[value] || []).forEach(([dx, dy]) => {
     ctx.beginPath();
@@ -370,22 +459,22 @@ function drawLeaderboard(state, topY) {
   assets.forEach((a, i) => {
     const ry = y0 + i * rowH;
     // 名次卡片
-    ctx.fillStyle = i === 0 ? '#fff6d0' : '#ffffff';
+    ctx.fillStyle = i === 0 ? (boardTheme.cardBgTop || '#fff6d0') : (boardTheme.cardBg || '#ffffff');
     roundRect(x0 - 12, ry - rowH * 0.42, w + 24, rowH * 0.84, 14);
     ctx.fill();
-    ctx.strokeStyle = i === 0 ? '#e0a800' : INK_SOFT;
+    ctx.strokeStyle = i === 0 ? (boardTheme.titleB || '#e0a800') : inkSoftColor();
     ctx.lineWidth = i === 0 ? 3 : 2;
     ctx.stroke();
     ctx.fillStyle = a.color;
     ctx.beginPath();
     ctx.arc(x0 + 8, ry, 6, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = INK;
+    ctx.fillStyle = cardTextColor();
     ctx.font = (i === 0 ? '800 ' : '700 ') + '15px "Baloo 2", "Microsoft YaHei", system-ui, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText((i + 1) + '. ' + a.name + (a.bankrupt ? '（破产）' : ''), x0 + 24, ry);
     ctx.textAlign = 'right';
-    ctx.fillStyle = i === 0 ? '#c47a00' : INK_LABEL;
+    ctx.fillStyle = i === 0 ? (boardTheme.titleB || '#c47a00') : (boardTheme.label || inkColor());
     ctx.font = '800 14px "Baloo 2", "Microsoft YaHei", system-ui, sans-serif';
     ctx.fillText('¥' + a.value, x0 + w, ry);
   });
@@ -450,7 +539,7 @@ function drawToken(px, py, radius, color, label, highlight) {
   ctx.fillStyle = g;
   ctx.fill();
   // 卡通描边：深墨外圈 + 白色内圈
-  ctx.strokeStyle = INK;
+  ctx.strokeStyle = inkColor();
   ctx.lineWidth = 3.5;
   ctx.stroke();
   ctx.beginPath();
@@ -639,7 +728,7 @@ function drawMortgageTag(cx, cy, size) {
   ctx.fillStyle = '#ff6b6b';
   roundRect(cx - w / 2, cy - h / 2, w, h, 10);
   ctx.fill();
-  strokeRound(cx - w / 2, cy - h / 2, w, h, 10, INK, 2.5);
+  strokeRound(cx - w / 2, cy - h / 2, w, h, 10, inkColor(), 2.5);
   drawText('已抵押', cx, cy + 0.5, Math.max(10, Math.round(h * 0.55)), '#ffffff', 'center', 'bold');
 }
 
@@ -650,7 +739,7 @@ function drawOwnerBadge(owner, cx, cy, size, label) {
   ctx.fillStyle = owner.color;
   ctx.fill();
   ctx.lineWidth = 2.5;
-  ctx.strokeStyle = INK;
+  ctx.strokeStyle = inkColor();
   ctx.stroke();
   const text = String(label ?? [...String(owner.name)][0] ?? '?');
   drawText(text, cx, cy + 0.5, Math.round(r * 1.15), '#ffffff', 'center', 'bold');

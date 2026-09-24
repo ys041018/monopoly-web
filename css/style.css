@@ -60,6 +60,38 @@ input,select,button,textarea{font-family:inherit;font-weight:700;}
 .screen{display:flex;align-items:center;justify-content:center;height:100vh;padding:10px;overflow:hidden;}
 .hidden{display:none !important;}
 
+/* ---------- 地图专属页面背景（跟随所选地图） ---------- */
+body[data-map="mini"]{
+  background-color:#e9f7d9;
+  background-image:
+    radial-gradient(circle at 15% 20%, #ffffff 0 6%, transparent 6.4%),
+    radial-gradient(circle at 24% 13%, #ffffff 0 4.5%, transparent 4.9%),
+    radial-gradient(circle at 50% 108%, #bfe89a 0 32%, transparent 32.5%),
+    linear-gradient(180deg,#cdefff 0%,#e9f7d9 60%,#f6ffd9 100%);
+  background-attachment:fixed;
+}
+body[data-map="metro"]{
+  background-color:#dfe8f5;
+  background-image:
+    linear-gradient(180deg,rgba(255,255,255,.75),rgba(255,255,255,0) 45%),
+    radial-gradient(circle at 50% 112%, #b9cbe4 0 30%, transparent 30.5%),
+    linear-gradient(180deg,#bfd8f2 0%,#dfe8f5 55%,#eef3f9 100%);
+  background-attachment:fixed;
+}
+body[data-map="space"]{
+  background-color:#0b1026;
+  background-image:
+    radial-gradient(2px 2px at 12% 22%, #ffffff, transparent),
+    radial-gradient(1.6px 1.6px at 27% 61%, #cfe4ff, transparent),
+    radial-gradient(2.2px 2.2px at 41% 17%, #ffffff, transparent),
+    radial-gradient(1.4px 1.4px at 58% 74%, #d8c8ff, transparent),
+    radial-gradient(2px 2px at 72% 33%, #ffffff, transparent),
+    radial-gradient(1.6px 1.6px at 86% 58%, #cfe4ff, transparent),
+    radial-gradient(1.2px 1.2px at 9% 78%, #ffffff, transparent),
+    linear-gradient(180deg,#070b1c 0%,#131a3d 55%,#251d4a 100%);
+  background-attachment:fixed;
+}
+
 /* ---------- 按钮 ---------- */
 .btn{
   border:3px solid var(--ink);

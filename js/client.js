@@ -146,7 +146,7 @@ if (authToken) { authMsg.textContent = '正在自动登录...'; }
 (function initTheme() {
   // 兼容旧主题名（旧存档里可能是 emerald/classic/warm/cool）
   const LEGACY_THEME = { emerald: 'candy', classic: 'sky', warm: 'sakura', cool: 'mint' };
-  const raw = localStorage.getItem('monopoly_theme') || 'candy';
+  const raw = localStorage.getItem('monopoly_theme') || 'auto';
   const saved = LEGACY_THEME[raw] || raw;
   if (themeSelect) themeSelect.value = saved;
   setBoardTheme(saved);
@@ -292,6 +292,7 @@ function refresh() {
 
 function backToLobby() {
   state = null; isSpectator = false; entered = false; animating = false;
+  document.body.removeAttribute('data-map');   // 回大厅恢复默认背景
   game.classList.add('hidden');
   lobby.classList.remove('hidden');
   renderPlayers();
