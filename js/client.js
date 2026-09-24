@@ -137,7 +137,10 @@ if (authToken) { authMsg.textContent = '正在自动登录...'; }
 
 // ---------- 棋盘主题 ----------
 (function initTheme() {
-  const saved = localStorage.getItem('monopoly_theme') || 'emerald';
+  // 兼容旧主题名（旧存档里可能是 emerald/classic/warm/cool）
+  const LEGACY_THEME = { emerald: 'candy', classic: 'sky', warm: 'sakura', cool: 'mint' };
+  const raw = localStorage.getItem('monopoly_theme') || 'candy';
+  const saved = LEGACY_THEME[raw] || raw;
   if (themeSelect) themeSelect.value = saved;
   setBoardTheme(saved);
   if (themeSelect) themeSelect.addEventListener('change', () => {
