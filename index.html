@@ -8,23 +8,31 @@
 </head>
 <body>
   <button id="sound-toggle" class="sound-toggle" title="音效开关">🔊</button>
-  <!-- 大厅 -->
-  <div id="lobby" class="screen">
+  <!-- 登录 / 注册 -->
+  <div id="auth-screen" class="screen">
     <div class="card lobby-card">
       <h1 class="logo">🎲 大富翁</h1>
-      <p class="subtitle">单房间 · 2~8 人联机</p>
-
+      <p class="subtitle">登录 / 注册后进入游戏</p>
       <div id="auth-panel" class="auth-panel">
-        <h2>账号（可选，登录后记录战绩）</h2>
+        <h2>账号</h2>
         <input id="auth-user" type="text" maxlength="20" placeholder="用户名">
         <input id="auth-pass" type="password" maxlength="40" placeholder="密码">
-        <input id="auth-nick" type="text" maxlength="12" placeholder="昵称（注册用）">
+        <input id="auth-nick" type="text" maxlength="12" placeholder="昵称（注册用，可选）">
         <div class="auth-btns">
           <button id="auth-login-btn" class="btn primary">登录</button>
           <button id="auth-register-btn" class="btn ghost">注册</button>
         </div>
-        <p id="auth-msg" class="msg"></p>
       </div>
+      <p id="auth-msg" class="msg"></p>
+    </div>
+  </div>
+
+  <!-- 大厅 -->
+  <div id="lobby" class="screen hidden">
+    <div class="card lobby-card">
+      <h1 class="logo">🎲 大富翁</h1>
+      <p class="subtitle">单房间 · 2~8 人联机</p>
+
       <div id="auth-info" class="auth-info hidden">
         <span>已登录：<b id="auth-name"></b><i id="auth-stats" class="auth-stats"></i></span>
         <button id="auth-logout-btn" class="btn ghost">退出</button>

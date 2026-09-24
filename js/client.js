@@ -20,7 +20,7 @@ const lobby = $('lobby'), game = $('game');
 const nameInput = $('name-input'), roomInput = $('room-input'), joinBtn = $('join-btn'), startBtn = $('start-btn'), lobbyBtn = $('lobby-btn');
 const addAiBtn = $('add-ai-btn');
 const hotkeyBtn = $('hotkey-btn'), hotkeyPanel = $('hotkey-panel');
-const authPanel = $('auth-panel'), authInfo = $('auth-info'), authUser = $('auth-user'), authPass = $('auth-pass'), authNick = $('auth-nick'), authMsg = $('auth-msg'), authName = $('auth-name');
+const authScreen = $('auth-screen'), authPanel = $('auth-panel'), authInfo = $('auth-info'), authUser = $('auth-user'), authPass = $('auth-pass'), authNick = $('auth-nick'), authMsg = $('auth-msg'), authName = $('auth-name');
 const authLoginBtn = $('auth-login-btn'), authRegisterBtn = $('auth-register-btn'), authLogoutBtn = $('auth-logout-btn'), authStats = $('auth-stats');
 const createRoomBtn = $('create-room-btn');
 const themeSelect = $('theme-select');
@@ -52,6 +52,7 @@ let cardTimer = null;
 
 // ---------- 自动重连 ----------
 (function autoRejoin() {
+  if (!authToken) return;
   const savedId = sessionStorage.getItem('monopoly_player_id');
   const savedName = sessionStorage.getItem('monopoly_player_name');
   if (!savedId || !savedName) return;
@@ -117,7 +118,12 @@ authRegisterBtn.addEventListener('click', () => {
 authLogoutBtn.addEventListener('click', () => {
   if (authToken) ws.send(JSON.stringify({ type: 'logout', token: authToken }));
   authToken = null; localStorage.removeItem('monopoly_token');
-  authPanel.classList.remove('hidden'); authInfo.classList.add('hidden');
+  sessionStorage.removeItem('monopoly_player_id');
+  sessionStorage.removeItem('monopoly_player_name');
+  authScreen.classList.remove('hidden');
+  lobby.classList.add('hidden');
+  game.classList.add('hidden');
+  authInfo.classList.add('hidden');
   authMsg.textContent = ''; authPass.value = '';
 });
 ws.addEventListener('open', () => { if (authToken) ws.send(JSON.stringify({ type: 'auth', token: authToken })); });
@@ -127,7 +133,7 @@ hotkeyBtn.addEventListener('click', () => toggle(hotkeyPanel));
 
 [setMoney, setRounds, setHouse, setMap].forEach(el => el && el.addEventListener('change', sendSettings));
 
-if (authToken) { authPanel.classList.add('hidden'); authInfo.classList.remove('hidden'); }
+if (authToken) { authMsg.textContent = '正在自动登录...'; }
 
 // ---------- 棋盘主题 ----------
 (function initTheme() {
@@ -178,7 +184,9 @@ ws.onmessage = (e) => {
       break;
     case 'auth_ok':
       authToken = msg.token; localStorage.setItem('monopoly_token', msg.token);
-      authPanel.classList.add('hidden'); authInfo.classList.remove('hidden');
+      authScreen.classList.add('hidden');
+      lobby.classList.remove('hidden');
+      authInfo.classList.remove('hidden');
       authName.textContent = msg.user.nickname;
       nameInput.value = msg.user.nickname;
       authMsg.textContent = ''; authMsg.className = 'msg';
@@ -193,7 +201,10 @@ ws.onmessage = (e) => {
       break;
     }
     case 'auth_logout':
-      authPanel.classList.remove('hidden'); authInfo.classList.add('hidden');
+      authScreen.classList.remove('hidden');
+      lobby.classList.add('hidden');
+      game.classList.add('hidden');
+      authInfo.classList.add('hidden');
       break;
     case 'room_created':
       sessionStorage.setItem('monopoly_room', msg.roomCode);
