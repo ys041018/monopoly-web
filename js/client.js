@@ -823,7 +823,7 @@ function detectCard() {
 
 function showCard(card) {
   const isChance = card.type === 'chance';
-  if (cardPopupInner) cardPopupInner.style.backgroundImage = "url('assets/" + (isChance ? 'card-chance.jpg' : 'card-chest.jpg') + "')";
+  if (cardPopupInner) cardPopupInner.style.backgroundImage = "url('assets/" + (isChance ? 'card-chance.webp' : 'card-chest.webp') + "')";
   cardPopupTitle.textContent = isChance ? '❓ 机会' : '🍀 命运';
   cardPopupText.textContent = card.text;
   cardPopup.classList.remove('hidden');

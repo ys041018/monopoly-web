@@ -3,8 +3,9 @@
 // ============================================================
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
-import { readFile, existsSync } from 'fs';
-import { extname, join, dirname } from 'path';
+import { readFile, stat } from 'fs';
+import { extname, join, resolve, dirname, sep } from 'path';
+import { gzipSync, deflateSync, brotliCompressSync, constants as zlibConstants } from 'zlib';
 import { fileURLToPath } from 'url';
 import os from 'os';
 import { GameRoom } from './game-room.js';
@@ -12,37 +13,146 @@ import { dbReady, findUserByUsername, createUser, createSession, findSession, de
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
+const assetsDir = join(rootDir, 'assets');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'application/javascript; charset=utf-8',
-  '.json': 'application/json',
+  '.json': 'application/json; charset=utf-8',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+  '.txt': 'text/plain; charset=utf-8',
+  '.woff2': 'font/woff2',
 };
 
-const httpServer = createServer((req, res) => {
-  let urlPath = req.url.split('?')[0];
-  if (urlPath === '/') urlPath = '/index.html';
+// 文本类资源才压缩；结果按 路径|mtime|编码 缓存，避免每次请求重复压缩
+const COMPRESSIBLE = /^(text\/|application\/(javascript|json)|image\/svg)/;
+const compressCache = new Map();
+const COMPRESS_CACHE_MAX = 64;
 
-  const filePath = join(rootDir, urlPath);
-  if (!filePath.startsWith(rootDir)) {
-    res.writeHead(403); res.end('Forbidden'); return;
+function acceptedEncodings(header) {
+  const set = new Set();
+  String(header || '').toLowerCase().split(',').forEach((part) => {
+    const [name, ...params] = part.trim().split(';');
+    if (!name) return;
+    if (params.some((p) => /^q=0(\.0*)?$/.test(p.trim()))) return;
+    set.add(name.trim());
+  });
+  return set;
+}
+
+function pickEncoding(req, type, length) {
+  if (length < 1024 || !COMPRESSIBLE.test(type)) return null;
+  const ok = acceptedEncodings(req.headers['accept-encoding']);
+  if (ok.has('br')) return 'br';
+  if (ok.has('gzip')) return 'gzip';
+  if (ok.has('deflate')) return 'deflate';
+  return null;
+}
+
+function compressBody(key, data, enc) {
+  const cached = compressCache.get(key);
+  if (cached) return cached;
+  let out;
+  try {
+    if (enc === 'br') out = brotliCompressSync(data, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 5 } });
+    else if (enc === 'gzip') out = gzipSync(data, { level: 6 });
+    else out = deflateSync(data, { level: 6 });
+  } catch { return null; }
+  if (compressCache.size >= COMPRESS_CACHE_MAX) compressCache.clear();
+  compressCache.set(key, out);
+  return out;
+}
+
+const httpServer = createServer((req, res) => {
+  const method = req.method || 'GET';
+  if (method !== 'GET' && method !== 'HEAD') {
+    res.writeHead(405, { Allow: 'GET, HEAD', 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Method Not Allowed');
+    return;
   }
-  if (!existsSync(filePath)) {
-    res.writeHead(404); res.end('Not Found'); return;
+
+  // Render 健康检查：不读文件、不写日志
+  if ((req.url || '').split('?')[0] === '/healthz') {
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(method === 'HEAD' ? undefined : 'ok');
+    return;
   }
-  const ext = extname(filePath).toLowerCase();
-  readFile(filePath, (err, data) => {
-    if (err) { res.writeHead(500); res.end('Server Error'); return; }
-    res.writeHead(200, {
-      'Content-Type': MIME[ext] || 'application/octet-stream',
-      'Cache-Control': 'no-store, no-cache, must-revalidate',
+
+  let urlPath;
+  try {
+    urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Bad Request');
+    return;
+  }
+  if (urlPath === '/') urlPath = '/index.html';
+  // 屏蔽点文件/点目录（.env、.git、.node-version 等）
+  if (/(^|\/)\./.test(urlPath)) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Not Found');
+    return;
+  }
+
+  // 先归一化再校验，阻断 ../ 与 Windows 反斜杠穿越
+  const filePath = resolve(rootDir, '.' + urlPath);
+  if (filePath !== rootDir && !filePath.startsWith(rootDir + sep)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Forbidden');
+    return;
+  }
+
+  stat(filePath, (err, st) => {
+    if (err || !st.isFile()) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not Found');
+      return;
+    }
+
+    const type = MIME[extname(filePath).toLowerCase()] || 'application/octet-stream';
+    const etag = 'W/"' + st.size.toString(16) + '-' + Math.floor(st.mtimeMs).toString(16) + '"';
+    const headers = {
+      'Content-Type': type,
+      'Cache-Control': filePath.startsWith(assetsDir + sep) ? 'public, max-age=31536000, immutable' : 'no-cache',
+      'ETag': etag,
+      'Last-Modified': st.mtime.toUTCString(),
+      'Vary': 'Accept-Encoding',
+    };
+
+    // 条件请求：命中即 304，回访时只传几百字节
+    const since = Date.parse(req.headers['if-modified-since'] || '');
+    if (req.headers['if-none-match'] === etag
+      || (!req.headers['if-none-match'] && since && Math.floor(since / 1000) >= Math.floor(st.mtimeMs / 1000))) {
+      res.writeHead(304, headers);
+      res.end();
+      return;
+    }
+
+    readFile(filePath, (readErr, data) => {
+      if (readErr) {
+        res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('Server Error');
+        return;
+      }
+      let body = data;
+      const enc = pickEncoding(req, type, data.length);
+      if (enc) {
+        const packed = compressBody(filePath + '|' + Math.floor(st.mtimeMs) + '|' + enc, data, enc);
+        if (packed && packed.length < data.length) {
+          body = packed;
+          headers['Content-Encoding'] = enc;
+        }
+      }
+      headers['Content-Length'] = body.length;
+      res.writeHead(200, headers);
+      res.end(method === 'HEAD' ? undefined : body);
     });
-    res.end(data);
   });
 });
 

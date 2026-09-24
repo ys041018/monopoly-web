@@ -304,7 +304,11 @@ body {
 
 /* ===== 素材应用：背景图 + 金色装饰边框 + Logo 图标 ===== */
 body {
-  background: url('../assets/bg-casino.jpg') center / cover no-repeat fixed, #04120f;
+  background: url('../assets/bg-casino.webp') center / cover no-repeat fixed, #04120f;
+}
+/* 移动端 fixed 背景会掉帧，改为随页面滚动 */
+@media (max-width: 900px) {
+  body { background-attachment: scroll; }
 }
 .card, .game-wrap, .log-panel {
   border-radius: 0;
@@ -335,7 +339,7 @@ body {
   bottom: -54px;
   width: 250px;
   height: 174px;
-  background: url('../assets/coins.png') center / contain no-repeat;
+  background: url('../assets/coins.webp') center / contain no-repeat;
   pointer-events: none;
   opacity: 0.95;
   filter: drop-shadow(0 14px 26px rgba(0, 0, 0, 0.55));
@@ -345,7 +349,7 @@ body {
 /* ===== AI 素材装饰 ===== */
 .ornament-divider {
   height: 26px;
-  background: url('../assets/divider.png') center / contain no-repeat;
+  background: url('../assets/divider.webp') center / contain no-repeat;
   mix-blend-mode: screen;
   opacity: 0.95;
   margin: 2px 0 4px;
@@ -378,7 +382,7 @@ body {
   bottom: -34px;
   width: 210px;
   height: 210px;
-  background: url('../assets/chips.jpg') center / contain no-repeat;
+  background: url('../assets/chips.webp') center / contain no-repeat;
   -webkit-mask-image: radial-gradient(circle, #000 52%, transparent 72%);
   mask-image: radial-gradient(circle, #000 52%, transparent 72%);
   opacity: 0.9;
