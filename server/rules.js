@@ -22,10 +22,10 @@ export const UNMORTGAGE_INTEREST = 0.1;           // 赎回 +10%
 // 快速模式预设：高起点资金、租金加成、回合更少、倒计时更短
 export const FAST_MODE = {
   startMoney: 3000,
-  maxRounds: 30,
+  maxRounds: 60,
   houseMultiplier: 1.5,
   rentMultiplier: 1.5,
-  turnTimeout: 25000,
+  turnTimeout: 45000,
 };
 
 // 银行利息：每回合结束时按现金结算

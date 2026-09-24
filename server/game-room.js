@@ -172,6 +172,9 @@ export class GameRoom {
     // 快速模式：开局随机分地
     if (fast) this._distributeProperties();
 
+    // 开局就启动第一回合倒计时（此前首回合没有 deadline，界面不显示秒数）
+    this._resetTurnTimer();
+
     this.broadcastState();
     return { ok: true };
   }
