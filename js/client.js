@@ -672,8 +672,15 @@ function renderStockPanel() {
   });
   stockPanel.appendChild(qtyRow);
 
+  let sumCost = 0, sumValue = 0;
   state.stocks.forEach((s) => {
     const held = (me && me.stocks && me.stocks[s.id]) || 0;
+    const cost = (me && me.stockCost && me.stockCost[s.id]) || 0;
+    const avg = held > 0 ? Math.round(cost / held) : 0;
+    const value = held * s.price;
+    const pl = value - cost;
+    const plPct = cost > 0 ? Math.round(pl / cost * 100) : 0;
+    sumCost += cost; sumValue += value;
     const cash = me ? me.money : 0;
     const maxBuy = Math.max(0, Math.min(9999, Math.floor(cash / s.price)));
     const buyQty = stockQty === 'max' ? maxBuy : Math.min(stockQty, maxBuy);
@@ -683,8 +690,17 @@ function renderStockPanel() {
     const row = document.createElement('div');
     row.className = 'build-row';
     const info = document.createElement('span');
-    info.className = 'b-name';
-    info.textContent = s.name + ' ¥' + s.price + ' ' + arrow + (pct ? Math.abs(pct) + '%' : '') + ' · 持' + held;
+    info.className = 'stock-info';
+    const nameLine = document.createElement('span');
+    nameLine.className = 's-name';
+    nameLine.textContent = s.name + ' ¥' + s.price + ' ' + arrow + (pct ? Math.abs(pct) + '%' : '');
+    const subLine = document.createElement('span');
+    subLine.className = 's-sub' + (held > 0 && pl > 0 ? ' win' : (held > 0 && pl < 0 ? ' lose' : ''));
+    subLine.textContent = held > 0
+      ? '持 ' + held + ' · 均价 ¥' + avg + ' · ' + (pl >= 0 ? '+' : '-') + '¥' + Math.abs(pl) + '（' + (pl >= 0 ? '+' : '') + plPct + '%）'
+      : '未持仓';
+    info.appendChild(nameLine);
+    info.appendChild(subLine);
     row.appendChild(info);
     const buy = mkBtn('买 ' + buyQty, 'start');
     buy.disabled = !isMyTurn || !me || buyQty < 1;
@@ -692,13 +708,23 @@ function renderStockPanel() {
     const sell = mkBtn('卖 ' + sellQty, 'ghost');
     sell.disabled = !isMyTurn || sellQty < 1;
     if (!sell.disabled) sell.addEventListener('click', () => ws.send(JSON.stringify({ type: 'sell_stock', stockId: s.id, shares: sellQty })));
-    row.appendChild(buy);
-    row.appendChild(sell);
+    const acts = document.createElement('div');
+    acts.className = 'stock-actions';
+    acts.appendChild(buy);
+    acts.appendChild(sell);
+    row.appendChild(acts);
     stockPanel.appendChild(row);
   });
+  const sum = document.createElement('div');
+  const totalPL = sumValue - sumCost;
+  sum.className = 'stock-summary' + (totalPL > 0 ? ' win' : (totalPL < 0 ? ' lose' : ''));
+  sum.textContent = sumCost > 0
+    ? '持仓成本 ¥' + sumCost + ' · 市值 ¥' + sumValue + ' · 盈亏 ' + (totalPL >= 0 ? '+' : '-') + '¥' + Math.abs(totalPL)
+    : '还没有持仓，买入后这里汇总成本与盈亏';
+  stockPanel.appendChild(sum);
   const hint = document.createElement('div');
   hint.className = 'trade-bal';
-  hint.textContent = isMyTurn ? '「最大」= 买按现金能买多少 / 卖按全部持股 · 持股计入总资产' : '只能在自己回合买卖股票';
+  hint.textContent = isMyTurn ? '「最大」= 买按现金能买多少 / 卖按全部持股' : '只能在自己回合买卖股票';
   stockPanel.appendChild(hint);
 }
 

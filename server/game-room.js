@@ -139,6 +139,7 @@ export class GameRoom {
       position: 0, money: startMoney, inJail: false, jailedTurns: 0, outOfJailCards: 0, rest: false, bankrupt: false,
       team: this.settings.teamMode ? (teamIdx++ % 2 === 0 ? 'A' : 'B') : null,
       stocks: {},
+      stockCost: {},   // 各股持仓总成本（移动加权平均法算盈亏）
     }));
 
     this.state = {
@@ -651,7 +652,10 @@ export class GameRoom {
     if (cur.money < cost) return { error: '现金不足，需要 ¥' + cost };
     cur.money -= cost;
     cur.stocks[stock.id] = (cur.stocks[stock.id] || 0) + n;
-    this.addLog(cur.name + ' 买入「' + stock.name + '」' + n + ' 股（¥' + stock.price + '/股，共 ¥' + cost + '）');
+    if (!cur.stockCost) cur.stockCost = {};
+    cur.stockCost[stock.id] = (cur.stockCost[stock.id] || 0) + cost;
+    const avgAfterBuy = Math.round((cur.stockCost[stock.id] || 0) / cur.stocks[stock.id]);
+    this.addLog(cur.name + ' 买入「' + stock.name + '」' + n + ' 股（¥' + stock.price + '/股，共 ¥' + cost + '，持仓均价 ¥' + avgAfterBuy + '）');
     this.broadcastState();
     return { ok: true };
   }
@@ -666,8 +670,13 @@ export class GameRoom {
     if (held < n) return { error: '持股不足（当前 ' + held + ' 股）' };
     const gain = stock.price * n;
     cur.money += gain;
+    if (!cur.stockCost) cur.stockCost = {};
+    const totalCost = cur.stockCost[stock.id] || 0;
+    const avgCost = held > 0 ? totalCost / held : 0;
     cur.stocks[stock.id] = held - n;
-    this.addLog(cur.name + ' 卖出「' + stock.name + '」' + n + ' 股，得到 ¥' + gain);
+    cur.stockCost[stock.id] = cur.stocks[stock.id] > 0 ? Math.max(0, Math.round(totalCost - avgCost * n)) : 0;
+    const plAfterSell = gain - Math.round(avgCost * n);
+    this.addLog(cur.name + ' 卖出「' + stock.name + '」' + n + ' 股，得到 ¥' + gain + '（本次' + (plAfterSell >= 0 ? '盈利' : '亏损') + ' ¥' + Math.abs(plAfterSell) + '）');
     this.broadcastState();
     return { ok: true };
   }
