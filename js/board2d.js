@@ -470,9 +470,9 @@ function bindTileClick() {
   canvas.addEventListener('click', (e) => {
     const rect = canvas.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
-    const scale = SIZE / rect.width;
-    const x = (e.clientX - rect.left) * scale;
-    const y = (e.clientY - rect.top) * scale;
+    // 分别按宽高换算，避免画布被拉伸时下方格子坐标偏移
+    const x = (e.clientX - rect.left) * (SIZE / rect.width);
+    const y = (e.clientY - rect.top) * (SIZE / rect.height);
     for (let i = 0; i < activeMap.size; i++) {
       const r = tileRect(i);
       if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) {
