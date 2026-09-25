@@ -31,9 +31,9 @@ async function waitHealthy(p, timeoutMs = 10000) {
   }
 }
 
-function connect() {
+function connect(extraHeaders) {
   return new Promise((resolve) => {
-    const ws = new WebSocket('ws://127.0.0.1:' + port);
+    const ws = new WebSocket('ws://127.0.0.1:' + port, extraHeaders ? { headers: extraHeaders } : undefined);
     const queue = [];
     const waiters = [];
     ws.on('message', (raw) => {
@@ -70,6 +70,8 @@ before(async () => {
       SUPABASE_URL: '',
       SUPABASE_KEY: '',
       WS_HEARTBEAT_MS: '300',        // 心跳加速，便于测试
+      ROOM_GC_MS: '300',             // 房间回收加速
+      AUTH_RATE_LIMIT: '3',          // 限流阈值调低，便于测试
     }),
     stdio: 'ignore',
   });
@@ -282,6 +284,74 @@ test('快速匹配：总能进入一个房间，且 welcome 带回房间码', as
   assert.ok(w.roomCode, 'welcome 应带回房间码（前端靠它记录房间、刷新后可重连）');
   assert.equal(w.spectator, undefined, '未开局的房间不应是旁观');
   m.close();
+});
+
+test('健壮性：单条消息超过 64KB 会被断开', async () => {
+  const c = await connect();
+  const closed = new Promise((resolve) => {
+    c.ws.on('close', (code) => resolve(code));
+    setTimeout(() => resolve(null), 3000);
+  });
+  c.sendRaw(JSON.stringify({ type: 'join', name: 'x'.repeat(70000), roomCode: 'AAAAAA' }));
+  const code = await closed;
+  assert.ok(code !== null, '超大消息应导致连接被断开（实际未断开）');
+});
+
+test('健壮性：跨站 Origin 被拒绝，同源放行', async () => {
+  const bad = await new Promise((resolve) => {
+    const ws = new WebSocket('ws://127.0.0.1:' + port, { headers: { Origin: 'https://evil.example.com' } });
+    ws.on('close', (code) => resolve(code));
+    ws.on('open', () => setTimeout(() => resolve('still-open'), 500));
+    setTimeout(() => resolve('timeout'), 2500);
+  });
+  assert.equal(bad, 1008, '跨站 Origin 应以 1008 关闭，实际 ' + bad);
+
+  const same = await new Promise((resolve) => {
+    const ws = new WebSocket('ws://127.0.0.1:' + port, { headers: { Origin: 'http://127.0.0.1:' + port } });
+    let opened = false;
+    ws.on('message', () => { opened = true; });
+    ws.on('open', () => { ws.send(JSON.stringify({ type: 'list_rooms' })); });
+    ws.on('close', () => resolve('closed'));
+    setTimeout(() => resolve(opened ? 'ok' : 'no-message'), 1500);
+  });
+  assert.equal(same, 'ok', '同源连接应正常工作，实际 ' + same);
+});
+
+test('健壮性：昵称在服务端被裁剪到 12 字', async () => {
+  const a = await connect();
+  a.send({ type: 'create_room' });
+  const code = (await a.wait('room_created')).roomCode;
+  a.send({ type: 'join', name: '超长昵称'.repeat(20), roomCode: code });
+  await a.wait('welcome');
+  const pl = a.seen().filter(m => m.type === 'player_list').pop();
+  const name = pl.players[0].name;
+  assert.ok(name.length <= 12, '昵称应被裁剪，实际长度 ' + name.length + ': ' + name);
+  a.close();
+});
+
+test('健壮性：登录尝试过于频繁会被限流', async () => {
+  const c = await connect();
+  const results = [];
+  for (let i = 0; i < 6; i++) {
+    c.send({ type: 'login', username: 'nobody', password: 'whatever' });
+    results.push(await c.wait('auth_error'));
+  }
+  const limited = results.filter(r => /频繁/.test(r.message));
+  assert.ok(limited.length >= 1, '超过阈值后应出现限流提示，实际: ' + results.map(r => r.message).join(' | '));
+  c.close();
+});
+
+test('健壮性：没人加入的房间会被回收', async () => {
+  const c = await connect();
+  c.send({ type: 'create_room' });
+  const code = (await c.wait('room_created')).roomCode;
+  c.send({ type: 'list_rooms' });
+  const before = (await c.wait('room_list')).rooms.some(r => r.code === code);
+  await sleep(900);                       // ROOM_GC_MS=300
+  c.send({ type: 'list_rooms' });
+  const after = (await c.wait('room_list')).rooms.some(r => r.code === code);
+  assert.ok(!after, '空房间应被回收（回收前存在=' + before + '）');
+  c.close();
 });
 
 test('WebSocket：房间不存在时返回友好错误', async () => {

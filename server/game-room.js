@@ -37,6 +37,7 @@ export class GameRoom {
       randomMap: false,       // 开局随机地图
     };
     this.map = getMap(this.settings.mapId);
+    this.lastActiveAt = Date.now();   // 房间 GC 用
   }
 
   updateSettings(playerId, settings) {

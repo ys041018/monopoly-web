@@ -12,7 +12,7 @@ import { GameRoom } from './game-room.js';
 import { getMap } from '../js/data/maps.js';
 import { MAX_PLAYERS } from './rules.js';
 import { QUICK_PHRASES, QUICK_EMOJIS, CHAT_COOLDOWN_MS } from '../js/data/chat.js';
-import { dbReady, findUserByUsername, createUser, createSession, findSession, deleteSession, verifyPassword, getStats } from './db.js';
+import { dbReady, findUserByUsername, createUser, createSession, findSession, deleteSession, verifyPassword, getStats, pruneSessions } from './db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
@@ -166,7 +166,34 @@ const httpServer = createServer((req, res) => {
   });
 });
 
-const wss = new WebSocketServer({ server: httpServer });
+// 单条消息上限 64KB（默认是 100MB，容易被一条大消息打爆）
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map(x => x.trim()).filter(Boolean);
+const wss = new WebSocketServer({ server: httpServer, maxPayload: 64 * 1024 });
+
+// Origin 校验：默认只允许同源（防跨站 WebSocket 劫持）；可用 ALLOWED_ORIGINS 覆盖；无 Origin 的脚本客户端放行
+function originAllowed(origin, host) {
+  if (!origin) return true;
+  if (ALLOWED_ORIGINS.length) return ALLOWED_ORIGINS.includes(origin);
+  try { return new URL(origin).host === host; } catch { return false; }
+}
+
+// 登录/注册限流（内存计数，按 IP；AUTH_RATE_LIMIT 可覆盖）
+const AUTH_RATE_LIMIT = Number(process.env.AUTH_RATE_LIMIT) || 20;
+const AUTH_WINDOW_MS = 5 * 60 * 1000;
+const authHits = new Map();
+function authRateLimited(ip) {
+  const now = Date.now();
+  const rec = authHits.get(ip);
+  if (!rec || now > rec.resetAt) { authHits.set(ip, { count: 1, resetAt: now + AUTH_WINDOW_MS }); return false; }
+  rec.count += 1;
+  return rec.count > AUTH_RATE_LIMIT;
+}
+
+// 昵称清洗：去掉控制字符、限长 12
+function cleanNickname(raw) {
+  const name = String(raw || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 12);
+  return name || '玩家';
+}
 
 // 心跳探活：30 秒一轮，连续两轮没回应就断开
 // 避免手机切网/锁屏产生的半开连接一直占着玩家位（服务端以为他还在线）
@@ -193,7 +220,11 @@ function getRoom(code) {
   return rooms.get(key) || null;
 }
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
+  if (!originAllowed(req.headers.origin, req.headers.host)) {
+    try { ws.close(1008, 'origin not allowed'); } catch {}
+    return;
+  }
   ws.isAlive = true;
   ws.on('pong', () => { ws.isAlive = true; });
   let playerId = null;
@@ -206,6 +237,11 @@ wss.on('connection', (ws) => {
   const sendJSON = (o) => { try { ws.send(JSON.stringify(o)); } catch {} };
 
   const handleAuth = async (msg) => {
+    // 登录/注册限流（token 校验不算）——放在 dbReady 之前，未配置数据库时同样生效
+    if (msg.type !== 'auth') {
+      const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+      if (authRateLimited(ip)) { sendJSON({ type: 'auth_error', message: '尝试太频繁，请 5 分钟后再试' }); return; }
+    }
     if (!dbReady()) { sendJSON({ type: 'auth_error', message: '账号服务未配置（缺少 SUPABASE_URL / SUPABASE_KEY）' }); return; }
     try {
       if (msg.type === 'register') {
@@ -221,7 +257,7 @@ wss.on('connection', (ws) => {
         sendJSON({ type: 'auth_ok', token: sess.token, user: { id: r.user.id, username: r.user.username, nickname: r.user.nickname } });
       } else if (msg.type === 'login') {
         const user = await findUserByUsername(String(msg.username || '').trim());
-        if (!user || !verifyPassword(String(msg.password || ''), user.password_hash)) { sendJSON({ type: 'auth_error', message: '用户名或密码错误' }); return; }
+        if (!user || !(await verifyPassword(String(msg.password || ''), user.password_hash))) { sendJSON({ type: 'auth_error', message: '用户名或密码错误' }); return; }
         const sess = await createSession(user.id);
         sendJSON({ type: 'auth_ok', token: sess.token, user: { id: user.id, username: user.username, nickname: user.nickname } });
       } else if (msg.type === 'auth') {
@@ -265,8 +301,8 @@ wss.on('connection', (ws) => {
       if (!target) { sendError('房间不存在，请检查房间码'); return false; }
       room = target;
       roomCode = String(codeRaw || '').trim().toUpperCase();
-      const result = room.addPlayer(ws, name, savedPlayerId, joinUserId);
-      console.log('[加入] ' + (name || '(空)') + ' 房间=' + roomCode + ' -> ' +
+      const result = room.addPlayer(ws, cleanNickname(name), savedPlayerId, joinUserId);
+      console.log('[加入] ' + cleanNickname(name) + ' 房间=' + roomCode + ' -> ' +
         (result.error ? ('拒绝: ' + result.error) : (result.spectator ? '旁观' : '成功 id=' + result.id)));
       if (result.error) { room.sendError(ws, result.error); ws.close(); return false; }
 
@@ -349,6 +385,8 @@ wss.on('connection', (ws) => {
       ws.send(JSON.stringify({ type: 'left_room' }));
       return;
     }
+
+    if (room) room.lastActiveAt = Date.now();
 
     if (!playerId) { sendError('请先加入房间'); return; }
 
@@ -510,6 +548,26 @@ wss.on('connection', (ws) => {
   });
   ws.on('error', () => {});
 });
+
+// 定期清理：空房间 / 长期无人活动的大厅 / 过期会话
+setInterval(() => {
+  const now = Date.now();
+  for (const [code, room] of rooms) {
+    const idle = now - (room.lastActiveAt || now);
+    const empty = room.players.size === 0;
+    if (empty || (!room.started && idle > 30 * 60 * 1000)) {
+      if (room._turnTimer) clearTimeout(room._turnTimer);
+      if (room._aiTimer) clearTimeout(room._aiTimer);
+      if (room._auctionTimer) clearTimeout(room._auctionTimer);
+      rooms.delete(code);
+    }
+  }
+}, Number(process.env.ROOM_GC_MS) || 5 * 60 * 1000).unref();
+
+if (dbReady()) {
+  pruneSessions().catch((e) => console.error('[prune]', e.message));
+  setInterval(() => { pruneSessions().catch((e) => console.error('[prune]', e.message)); }, 6 * 3600 * 1000).unref();
+}
 
 const PORT = process.env.PORT || 4000;
 httpServer.listen(PORT, '0.0.0.0', () => {

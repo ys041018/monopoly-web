@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch --env-file-if-exists=.env server/index.js",
-    "test": "node --test --test-force-exit test/maps.test.js test/rules.test.js test/room.test.js test/server.test.js",
+    "test": "node --test --test-force-exit test/maps.test.js test/rules.test.js test/auth.test.js test/room.test.js test/server.test.js",
     "check": "node scripts/check.mjs"
   },
   "dependencies": {
