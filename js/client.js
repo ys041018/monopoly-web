@@ -1015,7 +1015,10 @@ function renderPlayers() {
     const isCur = p.id === curId;
     const li2 = document.createElement('li');
     if (isCur) li2.classList.add('current');
-    li2.innerHTML = `<span class="dot" style="background:${p.color}"></span><span class="p-name">${escapeHtml(p.name)}</span>${sp && sp.team ? '<span class="tag">' + sp.team + ' 队</span>' : ''}${sp && sp.bankrupt ? '<span class="tag">破产</span>' : ''}${isCur ? '<span class="tag turn">回合中</span>' : ''}<span class="p-money">¥${sp ? sp.money : 1500}</span>`;
+    // 编号与棋盘徽章一致（棋盘上用这个数字标归属）
+    const idx = state && sp ? state.players.indexOf(sp) + 1 : null;
+    const numHtml = idx ? '<span class="p-index" style="background:' + p.color + '">' + idx + '</span>' : '';
+    li2.innerHTML = `${numHtml}<span class="dot" style="background:${p.color}"></span><span class="p-name">${escapeHtml(p.name)}</span>${sp && sp.team ? '<span class="tag">' + sp.team + ' 队</span>' : ''}${sp && sp.bankrupt ? '<span class="tag">破产</span>' : ''}${isCur ? '<span class="tag turn">回合中</span>' : ''}<span class="p-money">¥${sp ? sp.money : 1500}</span>`;
     gamePlayerList.appendChild(li2);
   });
 }
@@ -1111,7 +1114,7 @@ function renderDeed(tileId) {
     html += '<div class="deed-note">' + g.name + '组 · 地价 ¥' + tile.price + ' · 建一栋房 ¥' + g.houseCost + '</div>';
     if (owner) {
       const houses = state.tileHouses[tileId] || 0;
-      html += '<div class="deed-owner" style="background:' + owner.color + '33;color:' + owner.color + '">👤 ' + owner.name + ' 持有 · ' + houses + ' 房</div>';
+      html += '<div class="deed-owner" style="background:' + owner.color + '33;color:' + owner.color + '">👤 ' + owner.name + '（' + (state.players.indexOf(owner) + 1) + ' 号）持有 · ' + houses + ' 房</div>';
     }
     html += '<div class="deed-title" style="font-size:15px;margin-top:4px">过路费（租金）</div>';
     const names = ['空地', '1 房', '2 房', '3 房', '4 房', '旅馆'];
@@ -1128,7 +1131,7 @@ function renderDeed(tileId) {
     html += '<div class="deed-band" style="background:#78909C"></div>';
     html += '<div class="deed-title">' + tile.name + '（车站）</div>';
     html += '<div class="deed-note">地价 ¥200</div>';
-    if (owner) html += '<div class="deed-owner" style="background:' + owner.color + '33;color:' + owner.color + '">👤 ' + owner.name + ' 持有</div>';
+    if (owner) html += '<div class="deed-owner" style="background:' + owner.color + '33;color:' + owner.color + '">👤 ' + owner.name + '（' + (state.players.indexOf(owner) + 1) + ' 号）持有</div>';
     html += '<div class="deed-title" style="font-size:15px;margin-top:4px">过路费（按持有车站数）</div>';
     [25, 50, 100, 200].forEach((r, i) => {
       html += '<div class="deed-row"><span class="k">持有 ' + (i + 1) + ' 个车站</span><span class="v">¥' + r + '</span></div>';

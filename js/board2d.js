@@ -232,7 +232,13 @@ function drawProperty(id, tile, r, vertical, corner, state) {
   ctx.fill();
   strokeRound(band.x, band.y, band.w, band.h, 8, inkColor(), 2.5);
 
-  if (!owner) {
+  // 归属强化：有主的地用玩家色再描一圈（一眼看出是谁的）
+  if (owner) {
+    roundRect(x + 2.5, y + 2.5, w - 5, h - 5, 8);
+    ctx.strokeStyle = owner.color;
+    ctx.lineWidth = 3.5;
+    ctx.stroke();
+  } else {
     drawIcon('🏠', band.x + band.w / 2, band.y + band.h / 2, corner ? 26 : 16);
   }
 
@@ -270,7 +276,7 @@ function drawProperty(id, tile, r, vertical, corner, state) {
       }
     }
     // 归属徽章：玩家色圆形 + 玩家序号，放在卡片右上角
-    drawOwnerBadge(owner, x + w - 12, y + 12, 22, state.players.indexOf(owner) + 1);
+    drawOwnerBadge(owner, x + w - 13, y + 13, 24, state.players.indexOf(owner) + 1);
   }
   if (state && state.tileMortgaged[id]) drawMortgageTag(r.x + r.w / 2, r.y + r.h / 2, Math.min(r.w, r.h) * 0.72);
 }
@@ -308,11 +314,17 @@ function drawSpecial(id, tile, r, vertical, corner, state) {
     drawText(tile.name, r.x + r.w * 0.58, r.y + r.h / 2, 13, tileTextColor(), 'center', 'bold');
   }
 
-  // 车站/公共事业归属：与地产一致的玩家徽章
+  // 车站/公共事业归属：玩家色描边 + 徽章
   const ownerId = state ? state.tileOwners[id] : null;
   if (ownerId && (tile.type === 'railroad' || tile.type === 'utility')) {
     const owner = state.players.find(p => p.id === ownerId);
-    if (owner) drawOwnerBadge(owner, x + w - 12, y + 12, 22, state.players.indexOf(owner) + 1);
+    if (owner) {
+      roundRect(x + 2.5, y + 2.5, w - 5, h - 5, 8);
+      ctx.strokeStyle = owner.color;
+      ctx.lineWidth = 3.5;
+      ctx.stroke();
+      drawOwnerBadge(owner, x + w - 13, y + 13, 24, state.players.indexOf(owner) + 1);
+    }
   }
   if (state && state.tileMortgaged[id]) drawMortgageTag(r.x + r.w / 2, r.y + r.h / 2, Math.min(r.w, r.h) * 0.72);
 }
@@ -738,8 +750,13 @@ function drawOwnerBadge(owner, cx, cy, size, label) {
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fillStyle = owner.color;
   ctx.fill();
-  ctx.lineWidth = 2.5;
-  ctx.strokeStyle = inkColor();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#ffffff';   // 白圈保证在深色地图皮肤上也醒目
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + 1.6, 0, Math.PI * 2);
+  ctx.lineWidth = 1.6;
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
   ctx.stroke();
   const text = String(label ?? [...String(owner.name)][0] ?? '?');
   drawText(text, cx, cy + 0.5, Math.round(r * 1.15), '#ffffff', 'center', 'bold');

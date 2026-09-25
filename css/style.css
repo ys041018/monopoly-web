@@ -400,6 +400,15 @@ select,.theme-select{cursor:pointer;}
 .action-modal-card .drawer-head { margin-bottom: 4px; }
 .action-modal-card .trade-tiles { max-height: 46vh; overflow-y: auto; }
 
+/* 玩家编号：与棋盘上的归属徽章对应 */
+.p-index {
+  width: 19px; height: 19px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; border: 2px solid var(--ink);
+  color: #fff; font-size: 11px; font-weight: 900; line-height: 1;
+  box-shadow: 0 1px 0 rgba(47, 50, 101, .45);
+}
+
 /* ---------- 侧栏信息层级：状态 → 主操作 → 入口 → 抽屉 → 玩家 → 工具 ---------- */
 .action-card { padding: 12px; }
 .entry-row {
