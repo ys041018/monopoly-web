@@ -12,8 +12,111 @@ import { getMap } from './data/maps.js';
 let activeTiles = getMap('standard').tiles;
 import { playForLog, play, setSoundEnabled, isSoundEnabled } from './sound.js';
 
-const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-const ws = new WebSocket(`${proto}//${location.host}`);
+const WS_URL = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}`;
+
+// ---------- 连接层：断线自动重连 ----------
+// 保持 ws.send / ws.onmessage 等原有调用方式不变，内部换成可重连的壳
+const conn = {
+  socket: null,
+  queue: [],
+  retry: 0,
+  retryTimer: null,
+  listeners: { open: [], message: [], close: [] },
+  onopen: null, onmessage: null, onclose: null,
+  get readyState() { return this.socket ? this.socket.readyState : 3; },
+  addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
+  emit(type, arg) {
+    const direct = this['on' + type];
+    if (typeof direct === 'function') { try { direct(arg); } catch (e) { console.error(e); } }
+    (this.listeners[type] || []).forEach((fn) => { try { fn(arg); } catch (e) { console.error(e); } });
+  },
+  send(text) {
+    if (this.socket && this.socket.readyState === 1) { this.socket.send(text); return; }
+    if (this.queue.length < 30) this.queue.push(text);   // 断线期间排队，重连后补发
+  },
+  connect() {
+    if (this.socket && this.socket.readyState <= 1) return;
+    let s;
+    try { s = new WebSocket(WS_URL); } catch { this.scheduleRetry(); return; }
+    this.socket = s;
+    s.onopen = () => {
+      const wasRetry = this.retry > 0;
+      this.retry = 0;
+      setConnStatus('');
+      this.emit('open');
+      const pending = this.queue.splice(0);
+      pending.forEach((text) => { try { s.send(text); } catch {} });
+      if (wasRetry) resumeAfterReconnect();
+    };
+    s.onmessage = (e) => { lastServerMsgAt = Date.now(); this.emit('message', e); };
+    s.onclose = () => {
+      if (this.socket === s) this.socket = null;
+      this.emit('close');
+      this.scheduleRetry();
+    };
+    s.onerror = () => { try { s.close(); } catch {} };
+  },
+  scheduleRetry() {
+    if (this.retryTimer) return;
+    const delay = Math.min(1000 * Math.pow(2, this.retry), 15000);
+    this.retry++;
+    setConnStatus('连接已断开，正在重连…（' + Math.round(delay / 1000) + 's）');
+    this.retryTimer = setTimeout(() => { this.retryTimer = null; this.connect(); }, delay);
+  },
+};
+const ws = conn;
+let lastServerMsgAt = Date.now();
+
+// 顶部断线提示条
+function setConnStatus(text) {
+  let el = document.getElementById('conn-banner');
+  if (!text) { if (el) el.classList.add('hidden'); return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'conn-banner';
+    el.className = 'conn-banner';
+    document.body.appendChild(el);
+  }
+  el.textContent = text;
+  el.classList.remove('hidden');
+}
+
+// 重连成功后恢复身份与房间
+function resumeAfterReconnect() {
+  // 游客（未登录）也要能恢复房间，所以不能因为没 token 就返回
+  const savedId = sessionStorage.getItem('monopoly_player_id');
+  const savedName = sessionStorage.getItem('monopoly_player_name');
+  const savedRoom = sessionStorage.getItem('monopoly_room');
+  gotError = false;
+  if (authToken) ws.send(JSON.stringify({ type: 'auth', token: authToken }));
+  if (savedId && savedName && savedRoom) {
+    ws.send(JSON.stringify({ type: 'join', name: savedName, playerId: savedId, roomCode: savedRoom, token: authToken || undefined }));
+    setMsg('已重连，正在恢复对局…');
+  } else if (authToken) {
+    setMsg('已重连');
+  }
+}
+
+// 手机切网/飞行模式：浏览器不一定立刻关闭已有连接，主动断开并重连
+window.addEventListener('offline', () => {
+  setConnStatus('网络已断开，正在等待恢复…');
+  if (ws.socket) { try { ws.socket.close(); } catch {} }
+});
+window.addEventListener('online', () => {
+  if (ws.retryTimer) { clearTimeout(ws.retryTimer); ws.retryTimer = null; }
+  ws.connect();
+});
+
+// 看门狗：75 秒收不到任何消息（含服务端心跳）就主动重连
+setInterval(() => {
+  if (Date.now() - lastServerMsgAt > 75000) {
+    lastServerMsgAt = Date.now();
+    if (ws.socket) { try { ws.socket.close(); } catch {} }
+    else ws.scheduleRetry();
+  }
+}, 20000);
+
+conn.connect();
 
 const $ = (id) => document.getElementById(id);
 const lobby = $('lobby'), game = $('game');
@@ -173,7 +276,10 @@ document.addEventListener('keydown', (e) => {
 
 // ---------- 接收 ----------
 ws.onopen = () => setMsg('已连接服务器');
-ws.onclose = () => { if (!gotError) setMsg('连接已断开，请刷新页面', true); };
+ws.onclose = () => {
+  // 断线由连接层自动重连，这里只提示，不再要求刷新页面
+  setConnStatus('连接已断开，正在重连…');
+};
 
 ws.onmessage = (e) => {
   let msg;

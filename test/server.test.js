@@ -62,7 +62,12 @@ function connect() {
 before(async () => {
   port = await freePort();
   child = spawn(process.execPath, ['server/index.js'], {
-    env: Object.assign({}, process.env, { PORT: String(port), SUPABASE_URL: '', SUPABASE_KEY: '' }),
+    env: Object.assign({}, process.env, {
+      PORT: String(port),
+      SUPABASE_URL: '',
+      SUPABASE_KEY: '',
+      WS_HEARTBEAT_MS: '300',        // 心跳加速，便于测试
+    }),
     stdio: 'ignore',
   });
   const okStart = await waitHealthy(port);
@@ -139,6 +144,31 @@ test('WebSocket：建房→加入→加机器人→开局→掷骰 全链路', a
   const after = await a.wait('game_state');
   assert.ok(after.state.lastMove && typeof after.state.lastMove.seq === 'number', '掷骰后应有 lastMove.seq');
   a.close();
+});
+
+test('心跳：服务端定期发 ping，不回应会被断开', async () => {
+  // 正常客户端自动回 pong，应收到 ping 且保持连接
+  const alive = new WebSocket('ws://127.0.0.1:' + port);
+  let pings = 0;
+  alive.on('ping', () => { pings++; });
+  await new Promise((resolve) => {
+    alive.on('open', resolve);
+    setTimeout(resolve, 1500);
+  });
+  await sleep(800);
+  assert.ok(pings >= 1, '应收到至少 1 次 ping，实际 ' + pings);
+  assert.equal(alive.readyState, WebSocket.OPEN, '正常客户端不应被断开');
+  alive.close();
+
+  // 不自动回 pong 的客户端会被服务端判定为死连接并断开
+  const zombie = new WebSocket('ws://127.0.0.1:' + port, { autoPong: false });
+  const closed = await new Promise((resolve) => {
+    let done = false;
+    zombie.on('close', () => { if (!done) { done = true; resolve(true); } });
+    zombie.on('open', () => setTimeout(() => { if (!done) { done = true; resolve(zombie.readyState === WebSocket.CLOSED); } }, 1500));
+    setTimeout(() => { if (!done) { done = true; resolve(false); } }, 4000);
+  });
+  assert.ok(closed, '不回 pong 的半开连接应被服务端断开');
 });
 
 test('WebSocket：房间不存在时返回友好错误', async () => {

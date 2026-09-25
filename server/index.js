@@ -164,6 +164,18 @@ const httpServer = createServer((req, res) => {
 });
 
 const wss = new WebSocketServer({ server: httpServer });
+
+// 心跳探活：30 秒一轮，连续两轮没回应就断开
+// 避免手机切网/锁屏产生的半开连接一直占着玩家位（服务端以为他还在线）
+const HEARTBEAT_MS = Number(process.env.WS_HEARTBEAT_MS) || 30000;
+const heartbeatTimer = setInterval(() => {
+  wss.clients.forEach((client) => {
+    if (client.isAlive === false) { try { client.terminate(); } catch {} return; }
+    client.isAlive = false;
+    try { client.ping(); } catch {}
+  });
+}, HEARTBEAT_MS);
+wss.on('close', () => clearInterval(heartbeatTimer));
 // 多房间：按房间码路由到独立 GameRoom
 const rooms = new Map();
 function genCode() {
@@ -179,6 +191,8 @@ function getRoom(code) {
 }
 
 wss.on('connection', (ws) => {
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
   let playerId = null;
   let isSpectator = false;
   let room = null;

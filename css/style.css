@@ -468,3 +468,16 @@ button, .btn, .qty-btn, .sound-toggle { touch-action: manipulation; }
   .action-btns { grid-template-columns: 1fr; }
   #board { width: min(100vw - 14px, 72vh); }
 }
+
+/* ---------- 断线提示条 ---------- */
+.conn-banner {
+  position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+  z-index: 200; padding: 8px 18px; border-radius: 999px;
+  background: var(--candy-orange); color: #4a2c05; font-size: 13.5px; font-weight: 900;
+  border: 3px solid var(--ink); box-shadow: 0 4px 0 var(--ink);
+  animation: popIn .2s var(--pop);
+  pointer-events: none;
+}
+@media (max-width: 980px) {
+  .conn-banner { top: 6px; font-size: 12.5px; padding: 6px 14px; }
+}
