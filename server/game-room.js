@@ -8,6 +8,7 @@ import {
   calcPropertyRent, calcRailroadRent, calcUtilityRent, getPropertyPrice, getHouseCost, HOTEL_LEVEL, DEFAULT_MAX_ROUNDS,
   FAST_MODE, STOCK_DEFS, DEFAULT_INTEREST_RATE,
   LOAN_RATE, LOAN_MAX, LOAN_ASSET_RATIO, LOAN_MIN, MARKET_EVENT_CHANCE,
+  SHORT_FEE_RATE, SHORT_MAX_VALUE, SHORT_CASH_RATIO, SHORT_MARGIN_RATIO,
 } from './rules.js';
 import { getMap } from '../js/data/maps.js';
 import { updateStats } from './db.js';
@@ -144,6 +145,8 @@ export class GameRoom {
       stocks: {},
       stockCost: {},   // 各股持仓总成本（移动加权平均法算盈亏）
       loan: 0,         // 银行贷款余额（计入总资产时为负数）
+      shorts: {},      // 融券做空持仓：stockId -> 股数
+      shortEntry: {},  // 空头开仓总额（算开仓均价与平仓盈亏）
     }));
 
     this.state = {
@@ -170,6 +173,7 @@ export class GameRoom {
       rentMultiplier: fast ? FAST_MODE.rentMultiplier : 1,
       interestRate: this.settings.interestRate || 0,
       loanRate: LOAN_RATE,
+      shortFeeRate: SHORT_FEE_RATE,
       turnTimeout: fast ? FAST_MODE.turnTimeout : TURN_TIMEOUT,
       stocks: STOCK_DEFS.map(d => ({ id: d.id, name: d.name, base: d.base, price: d.base, prev: d.base, kind: d.kind || 'stock' })),
       log: ['游戏开始！'],
@@ -719,6 +723,69 @@ export class GameRoom {
     return { ok: true };
   }
 
+  // ---------- 融券做空 ----------
+  shortSell(playerId, stockId, shares) {
+    const g = this._stockGuard(playerId, stockId);
+    if (g.error) return g;
+    const { cur, stock } = g;
+    const n = Math.floor(Number(shares) || 0);
+    if (n <= 0 || n > 9999) return { error: '股数不正确' };
+
+    const value = stock.price * n;
+    const cashAfter = cur.money + value;
+    const limit = Math.min(SHORT_MAX_VALUE, Math.floor(cashAfter * SHORT_CASH_RATIO));
+    if (this.shortValue(cur) + value > limit) {
+      return { error: '做空额度不足（上限 ¥' + limit + '，当前空头 ¥' + this.shortValue(cur) + '）' };
+    }
+
+    if (!cur.shorts) cur.shorts = {};
+    if (!cur.shortEntry) cur.shortEntry = {};
+    cur.money += value;
+    cur.shorts[stock.id] = (cur.shorts[stock.id] || 0) + n;
+    cur.shortEntry[stock.id] = (cur.shortEntry[stock.id] || 0) + value;
+    const avg = Math.round(cur.shortEntry[stock.id] / cur.shorts[stock.id]);
+    this.addLog(cur.name + ' 融券卖出「' + stock.name + '」' + n + ' 股（¥' + stock.price + '/股，开仓均价 ¥' + avg + '）');
+    this.broadcastState();
+    return { ok: true };
+  }
+
+  coverShort(playerId, stockId, shares) {
+    const g = this._stockGuard(playerId, stockId);
+    if (g.error) return g;
+    const { cur, stock } = g;
+    const held = (cur.shorts && cur.shorts[stock.id]) || 0;
+    if (held < 1) return { error: '没有该股的空头持仓' };
+    const n = Math.min(Math.floor(Number(shares) || 0), held);
+    if (n < 1) return { error: '股数不正确' };
+
+    const entryTotal = (cur.shortEntry && cur.shortEntry[stock.id]) || 0;
+    const avgEntry = held > 0 ? entryTotal / held : 0;
+    const cost = stock.price * n;
+    const entryPart = Math.round(avgEntry * n);
+    cur.money -= cost;
+    cur.shorts[stock.id] = held - n;
+    cur.shortEntry[stock.id] = cur.shorts[stock.id] > 0 ? Math.max(0, entryTotal - entryPart) : 0;
+    const pl = entryPart - cost;
+    this.addLog(cur.name + ' 买回「' + stock.name + '」' + n + ' 股平仓（本次' + (pl >= 0 ? '盈利' : '亏损') + ' ¥' + Math.abs(pl) + '）');
+    if (cur.money < 0) this.settleDebt(cur, null);
+    else this.broadcastState();
+    return { ok: true };
+  }
+
+  // 强制平仓（保证金不足时，按现价全部买回，允许现金转负 → 走破产清算）
+  _forceCover(player) {
+    if (!player || !player.shorts) return;
+    let cost = 0;
+    this.state.stocks.forEach((s) => {
+      const n = player.shorts[s.id] || 0;
+      if (n > 0) { cost += s.price * n; player.shorts[s.id] = 0; player.shortEntry[s.id] = 0; }
+    });
+    if (cost > 0) {
+      player.money -= cost;
+      this.addLog(player.name + ' 保证金不足，被强制平仓（支付 ¥' + cost + '）');
+    }
+  }
+
   // 回合推进
   finishTurn() {
     const n = this.state.players.length;
@@ -732,6 +799,21 @@ export class GameRoom {
         this.addLog(ending.name + ' 存款利息 +¥' + interest);
       }
     }
+    // 融券费与保证金
+    if (ending && !ending.bankrupt && this.shortValue(ending) > 0) {
+      const sv = this.shortValue(ending);
+      const fee = Math.max(1, Math.round(sv * (this.state.shortFeeRate || SHORT_FEE_RATE)));
+      ending.money -= fee;
+      this.addLog(ending.name + ' 融券费 −¥' + fee + '（空头市值 ¥' + sv + '）');
+      if (sv > ending.money * SHORT_MARGIN_RATIO) {
+        this._forceCover(ending);
+      }
+      if (ending.money < 0) {
+        this.settleDebt(ending, null);
+        if (this.state && this.state.phase === 'gameOver') return;
+      }
+    }
+
     // 贷款利息滚入本金
     if (ending && !ending.bankrupt && (ending.loan || 0) > 0) {
       const loanInterest = Math.max(1, Math.round(ending.loan * (this.state.loanRate || 0)));
@@ -1077,9 +1159,15 @@ export class GameRoom {
     return v;
   }
 
-  // 净资产 = 毛资产 − 贷款余额
+  // 空头市值（做空是负债，按现价计）
+  shortValue(player) {
+    if (!this.state || !this.state.stocks || !player || !player.shorts) return 0;
+    return this.state.stocks.reduce((sum, s) => sum + (player.shorts[s.id] || 0) * s.price, 0);
+  }
+
+  // 净资产 = 毛资产 − 贷款 − 空头市值
   _calcAssets(p) {
-    return this._grossAssets(p) - (p.loan || 0);
+    return this._grossAssets(p) - (p.loan || 0) - this.shortValue(p);
   }
 
   // 贷款额度：按【净资产】的 30% 计算（上限 ¥2500，按百元取整）
@@ -1225,7 +1313,10 @@ export class GameRoom {
   broadcastState() {
     // loanCap 随资产变化，这里按最新资产算好一起发（前端只负责展示）
     if (this.state && this.state.players) {
-      this.state.players.forEach((p) => { p.loanCap = this.loanCap(p); });
+      this.state.players.forEach((p) => {
+        p.loanCap = this.loanCap(p);
+        p.shortCap = Math.min(SHORT_MAX_VALUE, Math.max(0, Math.floor(p.money * SHORT_CASH_RATIO - this.shortValue(p))));
+      });
     }
     this.broadcast(JSON.stringify({ type: 'game_state', state: this.state }));
   }

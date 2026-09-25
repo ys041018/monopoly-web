@@ -141,6 +141,73 @@ test('股票：价格每轮波动且不越界', (t) => {
   assert.ok(before.length === S.stocks.length);
 });
 
+test('融券做空：开仓得现金、按额度限制、平仓结算盈亏、计入负债', (t2) => {
+  const { room, S } = setup(t2);
+  const p = S.players[0];
+  const pid = p.id;
+  S.current = 0; S.phase = 'rolling';
+  p.money = 4000;
+  const bank = S.stocks.find(s => s.id === 'bank');
+  const price = bank.price;
+
+  // 开仓：卖出即得现金
+  assert.ok(!room.shortSell(pid, 'bank', 5).error);
+  assert.equal(p.shorts.bank, 5, '空头股数');
+  assert.equal(p.money, 4000 + price * 5, '开仓所得现金');
+  assert.equal(p.shortEntry.bank, price * 5, '开仓总额');
+
+  // 超过额度被拒（额度上限 2000 或现金 50%）
+  assert.ok(room.shortSell(pid, 'bank', 500).error, '超额度应被拒');
+  assert.ok(room.shortSell(pid, 'bank', 0).error, '股数必须为正');
+
+  // 空头计入负债（净资产扣除）
+  assert.equal(room._calcAssets(p), room._grossAssets(p) - room.shortValue(p), '空头从净资产扣除');
+  assert.equal(room.shortValue(p), price * 5);
+
+  // 价格下跌 → 平仓后净赚价差
+  bank.price = Math.round(price * 0.8);
+  assert.ok(!room.coverShort(pid, 'bank', 5).error);
+  assert.equal(p.shorts.bank, 0, '平仓后空头归零');
+  const expectProfit = price * 5 - Math.round(price * 0.8) * 5;   // 开仓所得 − 买回成本
+  assert.equal(p.money, 4000 + expectProfit, '下跌时净赚 ' + expectProfit);
+  assert.ok(S.log.some(l => l.includes('盈利')), '日志应显示盈利');
+
+  // 价格上涨 → 平仓后净亏
+  const tech = S.stocks.find(s => s.id === 'tech');
+  const techPrice = tech.price;
+  const moneyBefore = p.money;
+  assert.ok(!room.shortSell(pid, 'tech', 2).error);
+  tech.price = Math.round(techPrice * 1.2);
+  assert.ok(!room.coverShort(pid, 'tech', 2).error);
+  assert.ok(p.money < moneyBefore, '上涨应净亏: ' + moneyBefore + ' -> ' + p.money);
+  assert.ok(S.log.some(l => l.includes('亏损')), '日志应显示亏损');
+});
+
+test('融券费与强制平仓：每回合 2% 费用，空头超过现金会被强平', (t2) => {
+  const { room, S } = setup(t2);
+  const p = S.players[0];
+  const pid = p.id;
+  S.current = 0; S.phase = 'rolling';
+  p.money = 3000;
+  const bank = S.stocks.find(s => s.id === 'bank');
+  room.shortSell(pid, 'bank', 5);
+
+  // 融券费 = 空头市值 × 2%
+  const sv = room.shortValue(p);
+  const cashBefore = p.money;
+  room.finishTurn();
+  const fee = Math.max(1, Math.round(sv * S.shortFeeRate));
+  assert.ok(S.log.some(l => l.includes('融券费')), '应记录融券费日志');
+
+  // 强制平仓：把价格推到远超现金，回合结束时保证金不足
+  S.current = 0; S.phase = 'rolling';
+  p.money = 100;
+  p.shorts = { bank: 5 }; p.shortEntry = { bank: 5 * bank.price };
+  room.finishTurn();
+  assert.equal(p.shorts.bank, 0, '保证金不足应被强制平仓');
+  assert.ok(S.log.some(l => l.includes('强制平仓')), '应有强制平仓日志');
+});
+
 test('指数基金：跟随个股表现且波动更平滑', (t2) => {
   const { room, S } = setup(t2);
   const index = S.stocks.find(s => s.id === 'index');

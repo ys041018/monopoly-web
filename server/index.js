@@ -402,6 +402,16 @@ wss.on('connection', (ws) => {
         if (r.error) room.sendError(ws, r.error);
         break;
       }
+      case 'short_sell': {
+        const r = room.shortSell(playerId, msg.stockId, msg.shares);
+        if (r.error) room.sendError(ws, r.error);
+        break;
+      }
+      case 'cover_short': {
+        const r = room.coverShort(playerId, msg.stockId, msg.shares);
+        if (r.error) room.sendError(ws, r.error);
+        break;
+      }
       case 'take_loan': {
         const r = room.takeLoan(playerId, msg.amount);
         if (r.error) room.sendError(ws, r.error);

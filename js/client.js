@@ -829,7 +829,7 @@ function renderStockPanel() {
   });
   stockPanel.appendChild(qtyRow);
 
-  let sumCost = 0, sumValue = 0;
+  let sumCost = 0, sumValue = 0, sumShort = 0, sumShortEntry = 0;
   state.stocks.forEach((s) => {
     const held = (me && me.stocks && me.stocks[s.id]) || 0;
     const cost = (me && me.stockCost && me.stockCost[s.id]) || 0;
@@ -837,7 +837,11 @@ function renderStockPanel() {
     const value = held * s.price;
     const pl = value - cost;
     const plPct = cost > 0 ? Math.round(pl / cost * 100) : 0;
-    sumCost += cost; sumValue += value;
+    const shortN = (me && me.shorts && me.shorts[s.id]) || 0;
+    const shortEntry = (me && me.shortEntry && me.shortEntry[s.id]) || 0;
+    const shortAvg = shortN > 0 ? Math.round(shortEntry / shortN) : 0;
+    const shortPl = shortEntry - shortN * s.price;      // 开仓所得 − 当前需买回成本
+    sumCost += cost; sumValue += value; sumShort += shortN * s.price; sumShortEntry += shortEntry;
     const cash = me ? me.money : 0;
     const maxBuy = Math.max(0, Math.min(9999, Math.floor(cash / s.price)));
     const buyQty = stockQty === 'max' ? maxBuy : Math.min(stockQty, maxBuy);
@@ -855,7 +859,13 @@ function renderStockPanel() {
     subLine.className = 's-sub' + (held > 0 && pl > 0 ? ' win' : (held > 0 && pl < 0 ? ' lose' : ''));
     subLine.textContent = held > 0
       ? '持 ' + held + ' · 均价 ¥' + avg + ' · ' + (pl >= 0 ? '+' : '-') + '¥' + Math.abs(pl) + '（' + (pl >= 0 ? '+' : '') + plPct + '%）'
-      : '未持仓';
+      : (shortN > 0 ? '' : '未持仓');
+    if (shortN > 0) {
+      subLine.textContent = (held > 0 ? subLine.textContent + ' · ' : '')
+        + '空 ' + shortN + ' · 均价 ¥' + shortAvg + ' · ' + (shortPl >= 0 ? '+' : '-') + '¥' + Math.abs(shortPl);
+      if (shortPl > 0) subLine.classList.add('win');
+      else if (shortPl < 0) subLine.classList.add('lose');
+    }
     info.appendChild(nameLine);
     info.appendChild(subLine);
     row.appendChild(info);
@@ -869,19 +879,47 @@ function renderStockPanel() {
     acts.className = 'stock-actions';
     acts.appendChild(buy);
     acts.appendChild(sell);
+
+    // 融券：最多还能卖空多少市值 = min(上限 − 已有空头, 现金 − 2×已有空头)
+    // 服务端已把"还能做空多少市值"算好（shortCap），这里只做股数换算
+    const shortCap = typeof me?.shortCap === 'number' ? me.shortCap : Math.min(2000 - sumShort, Math.max(0, cash - 2 * sumShort));
+    const maxShortQty = Math.max(0, Math.floor(shortCap / s.price));
+    const shortQty = stockQty === 'max' ? maxShortQty : Math.min(stockQty, maxShortQty);
+    const coverQty = stockQty === 'max' ? shortN : Math.min(stockQty, shortN);
+    const shortBtn = mkBtn('融券卖 ' + shortQty, 'primary');
+    shortBtn.disabled = !isMyTurn || shortQty < 1;
+    if (!shortBtn.disabled) shortBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'short_sell', stockId: s.id, shares: shortQty })));
+    const coverBtn = mkBtn('买回 ' + coverQty, 'ghost');
+    coverBtn.disabled = !isMyTurn || coverQty < 1;
+    if (!coverBtn.disabled) coverBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'cover_short', stockId: s.id, shares: coverQty })));
+    const shortActs = document.createElement('div');
+    shortActs.className = 'stock-actions';
+    shortActs.appendChild(shortBtn);
+    shortActs.appendChild(coverBtn);
+
     row.appendChild(acts);
+    row.appendChild(shortActs);
     stockPanel.appendChild(row);
   });
   const sum = document.createElement('div');
   const totalPL = sumValue - sumCost;
-  sum.className = 'stock-summary' + (totalPL > 0 ? ' win' : (totalPL < 0 ? ' lose' : ''));
-  sum.textContent = sumCost > 0
-    ? '持仓成本 ¥' + sumCost + ' · 市值 ¥' + sumValue + ' · 盈亏 ' + (totalPL >= 0 ? '+' : '-') + '¥' + Math.abs(totalPL)
-    : '还没有持仓，买入后这里汇总成本与盈亏';
+  const overall = totalPL + (sumShortEntry - sumShort);
+  sum.className = 'stock-summary' + (overall > 0 ? ' win' : (overall < 0 ? ' lose' : ''));
+  const shortPlTotal = sumShortEntry - sumShort;
+  const lines = [];
+  if (sumCost > 0 || sumShort > 0) {
+    lines.push('持仓成本 ¥' + sumCost + ' · 市值 ¥' + sumValue + ' · 盈亏 ' + (totalPL >= 0 ? '+' : '-') + '¥' + Math.abs(totalPL));
+  }
+  if (sumShort > 0) {
+    lines.push('空头市值 ¥' + sumShort + '（计入负债）· 浮动盈亏 ' + (shortPlTotal >= 0 ? '+' : '-') + '¥' + Math.abs(shortPlTotal));
+  }
+  sum.textContent = lines.length ? lines.join('　|　') : '还没有持仓，买入或融券卖出后这里汇总盈亏';
   stockPanel.appendChild(sum);
   const hint = document.createElement('div');
   hint.className = 'trade-bal';
-  hint.textContent = isMyTurn ? '「最大」= 买按现金能买多少 / 卖按全部持股' : '只能在自己回合买卖股票';
+  hint.textContent = isMyTurn
+    ? '「最大」= 买入按现金 / 卖出按持股 / 融券按额度 · 融券每回合收 2% 费用，保证金不足会强制平仓'
+    : '只能在自己回合买卖股票';
   stockPanel.appendChild(hint);
 }
 

@@ -47,6 +47,12 @@ export const STOCK_DEFS = [
   { id: 'index', name: '指数基金', base: 100, kind: 'index' },
 ];
 
+// 融券做空（借股卖出，价格跌了赚差价）
+export const SHORT_FEE_RATE = 0.02;      // 每回合按空头市值收 2% 融券费
+export const SHORT_MAX_VALUE = 2000;     // 空头市值上限
+export const SHORT_CASH_RATIO = 0.5;     // 空头市值不得超过现金的 50%
+export const SHORT_MARGIN_RATIO = 1.0;   // 空头市值超过现金 → 强制平仓
+
 // 每轮小概率出现全市场事件（股灾/牛市）
 export const MARKET_EVENT_CHANCE = 0.06;
 
