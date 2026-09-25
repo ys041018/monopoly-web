@@ -110,11 +110,27 @@ async function getStatsRow(userId) {
 }
 
 // 乐观锁：先读（含 updated_at），再用 updated_at 作条件写；被并发改过则重试
+// 排行榜统计口径：
+//   LEADERBOARD_MIN_GAMES  至少完成几局才上榜（默认 1，避免注册党占位）
+//   LEADERBOARD_EXCLUDE    隐藏名单，逗号分隔账号名（测试号临时隐藏，无需删数据）
+export function leaderboardFilters() {
+  const min = Number(process.env.LEADERBOARD_MIN_GAMES);
+  const minGames = Number.isFinite(min) && min >= 0 ? min : 1;
+  let filter = '&games=gt.' + Math.max(-1, minGames - 1);
+  const list = (process.env.LEADERBOARD_EXCLUDE || '').split(',').map(x => x.trim()).filter(Boolean);
+  if (list.length) {
+    const quoted = list.map(u => '"' + u.replace(/["\\]/g, '') + '"').join(',');
+    filter += '&users.username=not.in.(' + quoted + ')';
+  }
+  return filter;
+}
+
 // 排行榜（默认前 20）：按胜场、最高资产排序
 export async function getLeaderboard(limit = 20) {
   // games>0：只统计真正打过完整对局的账号（AI 玩家没有 userId，本来就不会进榜）
   const r = await sb('/rest/v1/stats?select=user_id,wins,losses,games,max_assets,users(username,nickname)'
-    + '&games=gt.0&order=wins.desc,max_assets.desc&limit=' + Math.max(1, Math.min(50, Number(limit) || 20)));
+    + leaderboardFilters()
+    + '&order=wins.desc,max_assets.desc&limit=' + Math.max(1, Math.min(50, Number(limit) || 20)));
   if (!r.ok || !Array.isArray(r.data)) return [];
   return r.data.map((row, i) => ({
     rank: i + 1,
@@ -142,7 +158,9 @@ export async function getRank(wins) {
 
 // 参与排行的总人数
 export async function getPlayerCount() {
-  const r = await sb('/rest/v1/stats?select=user_id&games=gt.0', { headers: { Prefer: 'count=exact', Range: '0-0' } });
+  // 计数必须带上关联字段，否则按 users.username 过滤会 400
+  const r = await sb('/rest/v1/stats?select=user_id,users(username)' + leaderboardFilters(),
+    { headers: { Prefer: 'count=exact', Range: '0-0' } });
   return countFromRange(r.headers);
 }
 
