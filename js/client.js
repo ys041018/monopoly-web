@@ -37,7 +37,7 @@ import { getMap } from './data/maps.js';
 let activeTiles = getMap('standard').tiles;
 import { playForLog, play, setSoundEnabled, isSoundEnabled } from './sound.js';
 import { QUICK_PHRASES, QUICK_EMOJIS } from './data/chat.js';
-import { getIdentity, identityMods } from './data/identities.js';
+import { getIdentity, identityMods, IDENTITIES } from './data/identities.js';
 
 const WS_URL = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}`;
 
@@ -170,6 +170,7 @@ const roomSettings = $('room-settings'), setMoney = $('set-money'), setRounds = 
 const setFast = $('set-fast'), setTeam = $('set-team'), setInterest = $('set-interest');
 const setAuction = $('set-auction'), setRandomLand = $('set-randomland'), setRandomMap = $('set-randommap'), setFund = $('set-fund');
 const fundLine = $('fund-line');
+const rulesBtn = $('rules-btn'), rulesBtnGame = $('rules-btn-game'), rulesModal = $('rules-modal'), rulesClose = $('rules-close'), rulesBody = $('rules-body');
 const soundToggle = $('sound-toggle'), copyRoomBtn = $('copy-room-btn');
 const rollBtn = $('roll-btn'), buyBtn = $('buy-btn'), skipBuyBtn = $('skip-buy-btn'), endTurnBtn = $('end-turn-btn');
 const buildBtn = $('build-btn'), mortgageBtn = $('mortgage-btn'), tradeBtn = $('trade-btn'), stockBtn = $('stock-btn'), loanBtn = $('loan-btn');
@@ -429,6 +430,7 @@ if (drawerClose) drawerClose.addEventListener('click', closeDrawer);
 if (actionModal) actionModal.addEventListener('click', (e) => { if (e.target === actionModal) closeDrawer(); });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && openDrawerKind) closeDrawer();
+  if (e.key === 'Escape' && rulesModal && !rulesModal.classList.contains('hidden')) closeRules();
 });
 
 authLoginBtn.addEventListener('click', () => {
@@ -1270,6 +1272,134 @@ function sumChecked(box) {
     sum += (state.tileHouses[id] || 0) * (GROUPS[t.group] ? GROUPS[t.group].houseCost : 100);
   });
   return sum;
+}
+
+// ---------- 规则说明 ----------
+const RULE_SECTIONS = [
+  { title: '🎯 基本流程', items: [
+    '2~8 人轮流行动，你的回合先掷骰（两颗，2~12 点）再移动',
+    '经过或停在「起点」+¥300（慈善家额外 +¥100）',
+    '停在无人拥有的地产可选择买下；不买则进入公开拍卖（无人出价即流拍）',
+    '停在别人的地产要付租金；停在「机会/命运」抽卡；停在「进监狱」被关押',
+  ] },
+  { title: '🏠 地产与租金', items: [
+    '集齐同一色组全部地产 = 垄断：空地租金翻倍',
+    '盖房必须先集齐整组，且要均匀盖（房子少的地先盖）；4 房之后第 5 级为旅馆',
+    '点击棋盘任意格子可查看该地契的完整租金表',
+  ] },
+  { title: '🏦 抵押 / 卖房', items: [
+    '抵押：立刻获得地价的 50% 现金；抵押期间不收租、不能盖房',
+    '赎回：支付抵押价的 110%',
+    '卖房：收回建房成本的 50%，且需先拆房子较多的地',
+  ] },
+  { title: '📈 股票', items: [
+    '5 支标的：银行股 / 能源股 / 科技股 / 地产股 / 指数基金（跟随四支个股的相对表现，波动更平滑）',
+    '只能在自己回合买卖；每回合结束价格波动，另有小概率触发全市场「股灾 / 牛市」',
+    '持仓会显示均价与浮动盈亏；「最大」= 按现金可买多少 / 按持股卖多少',
+    '融券做空：借股卖出立即得现金，每回合收空头市值 2% 融券费，买回平仓结算盈亏',
+    '空头市值计入负债；一旦空头市值超过现金会被强制平仓（做空有爆仓风险）',
+  ] },
+  { title: '💰 银行', items: [
+    '存款利息：每回合结束按现金计息（默认 1%，房规可调 0/1/2/5%）',
+    '贷款：额度 = 净资产 × 30%（上限 ¥2500），每回合 3% 利息滚入本金，可随时还款',
+    '贷款与空头都会计入负债，拉低总资产与排名',
+  ] },
+  { title: '🅿️ 公共基金池', items: [
+    '税费、卡牌与事件的罚款会进入公共基金池',
+    '踩到「免费停车」的人可以拿走整池金额',
+    '房主可在房间设置里关闭这条规则',
+  ] },
+  { title: '⛓️ 监狱', items: [
+    '停在「进监狱」会被送进监狱，最多关押 3 回合',
+    '出狱方式：掷出双数 / 支付 ¥50 保释金 / 使用出狱卡',
+  ] },
+  { title: '⚙️ 房规（房主可调）', items: [
+    '⚡ 快速模式：¥3000 起始 · 开局随机分地 · 租金 ×1.5 · 60 回合 · 45 秒倒计时',
+    '🤝 团队 2v2：按加入顺序分 A/B 队（需偶数人数），队友地产免租，按队伍总资产判定胜负，整队记战绩',
+    '🔨 破产拍卖：破产者地产由银行拍卖；关闭则直接由银行收回',
+    '🎲 开局随机分地 · 🗺️ 随机地图 · 💰 存款利息 · 🅿️ 公共基金池',
+  ] },
+  { title: '💥 破产与胜负', items: [
+    '现金不足时自动变卖房屋 → 抵押地产；仍然不够就宣告破产',
+    '破产者的资产归债权人；若欠银行，则由银行拍卖或收回',
+    '只剩一名存活玩家时结束；到达回合上限则按总资产结算',
+    '总资产 = 现金 + 地产 + 房屋投入 + 股票市值 − 贷款 − 空头市值',
+  ] },
+  { title: '⌨️ 快捷键', items: [
+    '空格 掷骰子 · B 买地 · E 结束回合 · G 盖房 · M 抵押/赎回 · T 发起交易',
+  ] },
+  { title: '📶 其他', items: [
+    '断线后会自动重连，回来仍在原来的座位',
+    '未登录时本局不计入战绩；完成一局（有人获胜或到达回合上限）才会上排行榜',
+  ] },
+];
+
+function renderRules() {
+  if (!rulesBody || rulesBody.dataset.ready === '1') return;
+  rulesBody.dataset.ready = '1';
+
+  RULE_SECTIONS.forEach((sec) => {
+    const box = document.createElement('div');
+    box.className = 'rule-sec';
+    const h = document.createElement('div');
+    h.className = 'rule-title';
+    h.textContent = sec.title;
+    box.appendChild(h);
+    const ul = document.createElement('ul');
+    ul.className = 'rule-list';
+    sec.items.forEach((text) => {
+      const li = document.createElement('li');
+      li.textContent = text;
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+    rulesBody.appendChild(box);
+  });
+
+  // 身份说明（从共享定义渲染，避免和玩法脱节）
+  const box = document.createElement('div');
+  box.className = 'rule-sec';
+  const h = document.createElement('div');
+  h.className = 'rule-title';
+  h.textContent = '🎭 身份卡（开局随机分配）';
+  box.appendChild(h);
+  const grid = document.createElement('div');
+  grid.className = 'identity-grid';
+  IDENTITIES.forEach((idn) => {
+    const cell = document.createElement('div');
+    cell.className = 'identity-cell';
+    const name = document.createElement('div');
+    name.className = 'id-name';
+    name.textContent = idn.icon + ' ' + idn.name;
+    const desc = document.createElement('div');
+    desc.className = 'id-desc';
+    desc.textContent = idn.desc;
+    cell.appendChild(name); cell.appendChild(desc);
+    grid.appendChild(cell);
+  });
+  box.appendChild(grid);
+  rulesBody.appendChild(box);
+}
+
+function openRules() {
+  if (!rulesModal) return;
+  renderRules();
+  rulesModal.classList.remove('hidden');
+}
+function closeRules() { if (rulesModal) rulesModal.classList.add('hidden'); }
+
+if (rulesBtn) rulesBtn.addEventListener('click', openRules);
+if (rulesBtnGame) rulesBtnGame.addEventListener('click', openRules);
+if (rulesClose) rulesClose.addEventListener('click', closeRules);
+if (rulesModal) rulesModal.addEventListener('click', (e) => { if (e.target === rulesModal) closeRules(); });
+
+// 首次进入自动展示一次规则
+if (!localStorage.getItem('monopoly_rules_seen')) {
+  setTimeout(() => {
+    if (!authScreen.classList.contains('hidden')) return;   // 还停在登录页就不弹
+    openRules();
+    localStorage.setItem('monopoly_rules_seen', '1');
+  }, 800);
 }
 
 // ---------- 演出效果（爽感） ----------

@@ -66,6 +66,7 @@
         <button id="quick-match-btn" class="btn" type="button">⚡ 快速匹配</button>
         <button id="rooms-btn" class="btn ghost" type="button">🌐 公开房间</button>
         <button id="leaderboard-btn" class="btn ghost" type="button">🏆 排行榜</button>
+        <button id="rules-btn" class="btn ghost" type="button">📖 规则说明</button>
       </div>
       <div class="join-row theme-row">
         <span class="theme-label">棋盘主题</span>
@@ -150,6 +151,7 @@
         </details>
         <div class="side-foot">
           <button id="hotkey-btn" class="btn ghost" type="button">⌨️ 快捷键</button>
+          <button id="rules-btn-game" class="btn ghost" type="button">📖 规则</button>
           <button id="lobby-btn" class="btn ghost" type="button">回到大厅</button>
         </div>
         <div id="hotkey-panel" class="hotkey-panel hidden">
@@ -171,6 +173,15 @@
   </div>
 
   <div id="card-popup" class="card-popup hidden"><div id="card-popup-inner" class="card-popup-inner"><div id="card-popup-title" class="card-popup-title"></div><div id="card-popup-text" class="card-popup-text"></div></div></div>
+  <div id="rules-modal" class="modal hidden">
+    <div class="modal-card rules-modal-card">
+      <div class="drawer-head">
+        <span class="drawer-title">📖 规则说明</span>
+        <button id="rules-close" class="btn ghost drawer-close" type="button">关闭</button>
+      </div>
+      <div id="rules-body" class="rules-body"></div>
+    </div>
+  </div>
   <div id="auction-modal" class="modal hidden">
     <div class="modal-card auction-modal-card">
       <div class="drawer-head">
