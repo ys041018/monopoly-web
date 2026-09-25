@@ -43,7 +43,12 @@ export const STOCK_DEFS = [
   { id: 'power', name: '能源股', base: 90 },
   { id: 'tech',  name: '科技股', base: 150 },
   { id: 'land',  name: '地产股', base: 100 },
+  // 指数基金不单独波动，价格跟随上面四支的相对表现（更平滑）
+  { id: 'index', name: '指数基金', base: 100, kind: 'index' },
 ];
+
+// 每轮小概率出现全市场事件（股灾/牛市）
+export const MARKET_EVENT_CHANCE = 0.06;
 
 // 地产租金：baseRent × (level+1)，垄断（集齐同色组）翻倍
 export function calcPropertyRent(tile, level, monopoly) {

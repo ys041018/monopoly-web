@@ -141,6 +141,51 @@ test('股票：价格每轮波动且不越界', (t) => {
   assert.ok(before.length === S.stocks.length);
 });
 
+test('指数基金：跟随个股表现且波动更平滑', (t2) => {
+  const { room, S } = setup(t2);
+  const index = S.stocks.find(s => s.id === 'index');
+  assert.ok(index, '应存在指数基金');
+  assert.equal(index.kind, 'index');
+  assert.equal(index.price, index.base, '初始价等于基准价');
+
+  // 把个股整体推到基准的 1.5 倍，指数应跟随上涨但更平滑
+  S.stocks.filter(s => s.kind !== 'index').forEach(s => { s.price = Math.round(s.base * 1.5); });
+  room._updateStockPrices();
+  assert.ok(index.price > index.base, '指数应随个股上涨: ' + index.price);
+  assert.ok(index.price <= Math.round(index.base * 1.5), '指数不应超过个股平均涨幅');
+  assert.ok(Math.abs(index.price / index.base - 1) <= Math.abs(1.5 - 1) + 0.05, '指数偏离不应大于个股');
+
+  // 个股腰斩，指数跟随下跌
+  S.stocks.filter(s => s.kind !== 'index').forEach(s => { s.price = Math.round(s.base * 0.6); });
+  room._updateStockPrices();
+  assert.ok(index.price < index.base, '指数应随个股下跌: ' + index.price);
+});
+
+test('市场事件：股灾全跌、牛市全涨、价格不越界', (t2) => {
+  const { room, S } = setup(t2);
+  const snapshot = () => S.stocks.map(s => s.price);
+  const before = snapshot();
+
+  const crash = room._applyMarketEvent('crash');
+  const afterCrash = snapshot();
+  assert.equal(crash.kind, 'crash');
+  assert.ok(afterCrash.every((v, i) => v < before[i]), '股灾应全市场下跌');
+  assert.ok(S.log.some(l => l.includes('股灾')), '应记录日志');
+
+  const beforeBoom = snapshot();
+  room._applyMarketEvent('boom');
+  const afterBoom = snapshot();
+  assert.ok(afterBoom.every((v, i) => v > beforeBoom[i]), '牛市应全市场上涨');
+  assert.ok(S.log.some(l => l.includes('牛市')));
+
+  // 连续事件也不会突破价格边界
+  for (let i = 0; i < 30; i++) room._applyMarketEvent(i % 2 ? 'boom' : 'crash');
+  S.stocks.forEach((s) => {
+    assert.ok(s.price >= Math.round(s.base * 0.3) - 1, s.id + ' 下限: ' + s.price);
+    assert.ok(s.price <= Math.round(s.base * 2.5) + 1, s.id + ' 上限: ' + s.price);
+  });
+});
+
 test('存款利息：回合结束按现金 1% 结算', (t) => {
   const { room, S } = setup(t);
   S.current = 0;

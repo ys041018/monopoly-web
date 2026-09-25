@@ -7,7 +7,7 @@ import {
   JAIL_BAIL,
   calcPropertyRent, calcRailroadRent, calcUtilityRent, getPropertyPrice, getHouseCost, HOTEL_LEVEL, DEFAULT_MAX_ROUNDS,
   FAST_MODE, STOCK_DEFS, DEFAULT_INTEREST_RATE,
-  LOAN_RATE, LOAN_MAX, LOAN_ASSET_RATIO, LOAN_MIN,
+  LOAN_RATE, LOAN_MAX, LOAN_ASSET_RATIO, LOAN_MIN, MARKET_EVENT_CHANCE,
 } from './rules.js';
 import { getMap } from '../js/data/maps.js';
 import { updateStats } from './db.js';
@@ -15,6 +15,8 @@ import { CHANCE_CARDS, CHEST_CARDS } from '../js/data/cards.js';
 
 const PLAYER_COLORS = ['#EF5350', '#FF9800', '#FDD835', '#66BB6A', '#4FC3F7', '#AB47BC', '#26C6DA', '#EC407A'];
 const TURN_TIMEOUT = 45000; // 回合倒计时（毫秒）
+// 全市场事件概率（可用环境变量覆盖，便于测试与调平衡）
+const EVENT_CHANCE = Number(process.env.MARKET_EVENT_CHANCE != null ? process.env.MARKET_EVENT_CHANCE : MARKET_EVENT_CHANCE);
 
 function uid() { return Math.random().toString(36).slice(2, 10); }
 
@@ -169,7 +171,7 @@ export class GameRoom {
       interestRate: this.settings.interestRate || 0,
       loanRate: LOAN_RATE,
       turnTimeout: fast ? FAST_MODE.turnTimeout : TURN_TIMEOUT,
-      stocks: STOCK_DEFS.map(d => ({ id: d.id, name: d.name, base: d.base, price: d.base, prev: d.base })),
+      stocks: STOCK_DEFS.map(d => ({ id: d.id, name: d.name, base: d.base, price: d.base, prev: d.base, kind: d.kind || 'stock' })),
       log: ['游戏开始！'],
     };
 
@@ -625,14 +627,47 @@ export class GameRoom {
 
   // ---------- 股市 ----------
   _updateStockPrices() {
-    if (!this.state || !this.state.stocks) return;
-    this.state.stocks.forEach((s) => {
+    const S = this.state;
+    if (!S || !S.stocks) return;
+    const regular = S.stocks.filter(s => s.kind !== 'index');
+    const index = S.stocks.find(s => s.kind === 'index');
+
+    // 1) 个股：均值回归 + 随机波动
+    regular.forEach((s) => {
       s.prev = s.price;
-      const drift = ((s.base - s.price) / s.base) * 0.12;   // 均值回归，避免价格跑飞
-      const noise = (Math.random() - 0.5) * 0.16;           // 每回合随机波动
+      const drift = ((s.base - s.price) / s.base) * 0.12;
+      const noise = (Math.random() - 0.5) * 0.16;
       const next = Math.round(s.price * (1 + drift + noise));
       s.price = Math.max(Math.round(s.base * 0.3), Math.min(Math.round(s.base * 2.5), next));
     });
+
+    // 2) 指数基金：跟随四支个股的平均相对表现（波动更平滑，适合稳健玩法）
+    if (index) {
+      index.prev = index.price;
+      const avgRatio = regular.reduce((sum, s) => sum + s.price / s.base, 0) / regular.length;
+      index.price = Math.max(Math.round(index.base * 0.4), Math.min(Math.round(index.base * 2.2), Math.round(index.base * avgRatio)));
+    }
+
+    // 3) 小概率全市场事件
+    if (Math.random() < EVENT_CHANCE) {
+      this._applyMarketEvent(Math.random() < 0.5 ? 'crash' : 'boom');
+    }
+  }
+
+  // 全市场事件：股灾 / 牛市（会被广播成气泡提示 + 记日志）
+  _applyMarketEvent(kind) {
+    const S = this.state;
+    if (!S || !S.stocks) return null;
+    const drop = kind === 'crash';
+    const pct = drop ? -(0.12 + Math.random() * 0.08) : (0.10 + Math.random() * 0.06);
+    S.stocks.forEach((s) => {
+      const next = Math.round(s.price * (1 + pct));
+      s.price = Math.max(Math.round(s.base * 0.3), Math.min(Math.round(s.base * 2.5), next));
+    });
+    const label = (drop ? '📉 股灾！全市场大跌 ' : '📈 牛市！全市场大涨 +') + Math.abs(Math.round(pct * 100)) + '%';
+    this.addLog(label);
+    this.broadcast(JSON.stringify({ type: 'chat', kind: 'text', text: label, name: '市场', color: drop ? '#c62828' : '#1a7f37' }));
+    return { kind, pct };
   }
 
   _stockGuard(playerId, stockId) {
