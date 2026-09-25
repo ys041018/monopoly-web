@@ -100,7 +100,14 @@ const httpServer = createServer((req, res) => {
     return;
   }
 
-  // 先归一化再校验，阻断 ../ 与 Windows 反斜杠穿越
+  // 只允许前端资源目录，服务端源码/配置文件一律不对外（顺带阻断 ../ 穿越）
+  const ALLOWED = ['/index.html', '/css/', '/js/', '/assets/'];
+  if (!ALLOWED.some((p) => (p.endsWith('/') ? urlPath.startsWith(p) : urlPath === p))) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Not Found');
+    return;
+  }
+
   const filePath = resolve(rootDir, '.' + urlPath);
   if (filePath !== rootDir && !filePath.startsWith(rootDir + sep)) {
     res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });

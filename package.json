@@ -5,7 +5,9 @@
   "description": "大富翁 - 网页联机版（单房间 2~6 人）",
   "scripts": {
     "start": "node server/index.js",
-    "dev": "node --watch --env-file-if-exists=.env server/index.js"
+    "dev": "node --watch --env-file-if-exists=.env server/index.js",
+    "test": "node --test --test-force-exit test/maps.test.js test/rules.test.js test/room.test.js test/server.test.js",
+    "check": "node scripts/check.mjs"
   },
   "dependencies": {
     "ws": "^8.18.0"
@@ -14,6 +16,6 @@
     "playwright": "^1.63.0"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

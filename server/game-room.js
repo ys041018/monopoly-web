@@ -1097,6 +1097,7 @@ export class GameRoom {
   resetToLobby() {
     if (this._auctionTimer) { clearTimeout(this._auctionTimer); this._auctionTimer = null; }
     if (this._turnTimer) { clearTimeout(this._turnTimer); this._turnTimer = null; }
+    if (this._aiTimer) { clearTimeout(this._aiTimer); this._aiTimer = null; }
     this.players.forEach((p) => { if (p._discTimer) { clearTimeout(p._discTimer); p._discTimer = null; } });
     this.started = false;
     this.state = null;
