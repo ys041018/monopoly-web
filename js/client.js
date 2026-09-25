@@ -11,6 +11,7 @@ import { GROUPS } from './data/tiles.js';
 import { getMap } from './data/maps.js';
 let activeTiles = getMap('standard').tiles;
 import { playForLog, play, setSoundEnabled, isSoundEnabled } from './sound.js';
+import { QUICK_PHRASES, QUICK_EMOJIS } from './data/chat.js';
 
 const WS_URL = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}`;
 
@@ -344,6 +345,7 @@ ws.onmessage = (e) => {
       if (!entered) { entered = true; enterGame(); }
       else syncGame();
       break;
+    case 'chat': showBubble(msg); break;
     case 'back_to_lobby': backToLobby(); break;
     case 'error':
       gotError = true;
@@ -364,6 +366,8 @@ function enterGame() {
   lobby.classList.add('hidden');
   game.classList.remove('hidden');
   tradePanel.classList.add('hidden');
+  const chatBox = document.getElementById('chat-box');
+  if (chatBox) chatBox.classList.remove('hidden');
   animatedMoveSeq = moveKey(state.lastMove);   // 进入/重连直接呈现当前局面，不重放本回合移动
   lastSoundLog = state.log && state.log.length ? state.log[state.log.length - 1] : null;
   render(state);
@@ -410,6 +414,8 @@ function refresh() {
 function backToLobby() {
   state = null; isSpectator = false; entered = false; animating = false;
   document.body.removeAttribute('data-map');   // 回大厅恢复默认背景
+  const chatBox = document.getElementById('chat-box');
+  if (chatBox) chatBox.classList.add('hidden');
   game.classList.add('hidden');
   lobby.classList.remove('hidden');
   renderPlayers();
@@ -833,6 +839,41 @@ function renderStockPanel() {
   hint.textContent = isMyTurn ? '「最大」= 买按现金能买多少 / 卖按全部持股' : '只能在自己回合买卖股票';
   stockPanel.appendChild(hint);
 }
+
+// ---------- 快捷语 / 表情弹幕 ----------
+function showBubble(msg) {
+  const layer = document.getElementById('bubble-layer');
+  if (!layer) return;
+  const el = document.createElement('div');
+  el.className = 'bubble' + (msg.kind === 'emoji' ? ' emoji' : '');
+  const body = document.createElement('span');
+  body.className = 'bubble-text';
+  body.textContent = msg.text;
+  const who = document.createElement('span');
+  who.className = 'bubble-name';
+  who.textContent = msg.name;
+  if (msg.color) who.style.color = msg.color;
+  el.appendChild(body);
+  el.appendChild(who);
+  el.style.left = (12 + Math.random() * 64) + '%';
+  layer.appendChild(el);
+  setTimeout(() => el.remove(), 2900);
+}
+
+(function initChat() {
+  const grid = document.getElementById('chat-grid');
+  if (!grid) return;
+  const items = QUICK_PHRASES.map(t2 => ({ kind: 'text', text: t2 }))
+    .concat(QUICK_EMOJIS.map(e => ({ kind: 'emoji', text: e })));
+  items.forEach((item) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chat-btn' + (item.kind === 'emoji' ? ' emoji' : '');
+    b.textContent = item.text;
+    b.addEventListener('click', () => ws.send(JSON.stringify({ type: 'quick_chat', text: item.text })));
+    grid.appendChild(b);
+  });
+})();
 
 // ---------- 工具 ----------
 function mkRow(name, status) {

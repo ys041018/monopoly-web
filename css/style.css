@@ -481,3 +481,38 @@ button, .btn, .qty-btn, .sound-toggle { touch-action: manipulation; }
 @media (max-width: 980px) {
   .conn-banner { top: 6px; font-size: 12.5px; padding: 6px 14px; }
 }
+
+/* ---------- 快捷语 / 表情弹幕 ---------- */
+.bubble-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 9; }
+.bubble {
+  position: absolute; bottom: 12%;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  max-width: 66%; padding: 7px 12px; border-radius: 16px;
+  background: var(--paper); border: 3px solid var(--ink);
+  box-shadow: 0 4px 0 rgba(47, 50, 101, .35);
+  animation: bubbleUp 2.9s ease-out forwards;
+}
+.bubble.emoji { background: transparent; border: none; box-shadow: none; }
+.bubble-text { font-size: 15px; font-weight: 900; color: var(--ink); line-height: 1.25; }
+.bubble.emoji .bubble-text { font-size: 44px; }
+.bubble-name { font-size: 11px; font-weight: 800; opacity: .85; }
+@keyframes bubbleUp {
+  0% { transform: translateY(24px) scale(.85); opacity: 0; }
+  16% { transform: translateY(0) scale(1); opacity: 1; }
+  75% { transform: translateY(-70px) scale(1); opacity: 1; }
+  100% { transform: translateY(-120px) scale(.95); opacity: 0; }
+}
+.chat-box { padding: 11px 13px; }
+.chat-box summary { cursor: pointer; font-weight: 900; font-size: 14px; list-style: none; outline: none; }
+.chat-box summary::-webkit-details-marker { display: none; }
+.chat-box summary::before { content: '▸ '; }
+.chat-box[open] summary::before { content: '▾ '; }
+.chat-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chat-btn {
+  border: 2.5px solid var(--ink); border-radius: 999px; background: #fff; color: var(--ink);
+  font-size: 12.5px; font-weight: 800; padding: 5px 11px; cursor: pointer;
+  box-shadow: 0 2px 0 var(--ink); font-family: inherit;
+}
+.chat-btn.emoji { font-size: 18px; padding: 3px 9px; }
+.chat-btn:active { transform: translateY(1px); box-shadow: 0 1px 0 var(--ink); }
+

@@ -111,7 +111,7 @@
   <!-- 游戏 -->
   <div id="game" class="screen hidden">
     <div class="game-wrap">
-      <div id="board"></div>
+      <div id="board"><div id="bubble-layer" class="bubble-layer"></div></div>
       <aside class="side">
         <!-- 回合状态（最醒目） -->
         <div class="turn-card">
@@ -152,6 +152,10 @@
           <ul id="game-player-list" class="player-list"></ul>
         </div>
 
+        <details id="chat-box" class="side-card chat-box hidden">
+          <summary>💬 快捷语 / 表情</summary>
+          <div id="chat-grid" class="chat-grid"></div>
+        </details>
         <button id="hotkey-btn" class="btn ghost">⌨️ 快捷键</button>
         <div id="hotkey-panel" class="hotkey-panel hidden">
           <div><kbd>空格</kbd>掷骰子</div>

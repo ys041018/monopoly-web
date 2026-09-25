@@ -9,6 +9,7 @@ import { gzipSync, deflateSync, brotliCompressSync, constants as zlibConstants }
 import { fileURLToPath } from 'url';
 import os from 'os';
 import { GameRoom } from './game-room.js';
+import { QUICK_PHRASES, QUICK_EMOJIS, CHAT_COOLDOWN_MS } from '../js/data/chat.js';
 import { dbReady, findUserByUsername, createUser, createSession, findSession, deleteSession, verifyPassword, getStats } from './db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -195,6 +196,7 @@ wss.on('connection', (ws) => {
   ws.on('pong', () => { ws.isAlive = true; });
   let playerId = null;
   let isSpectator = false;
+  let lastChatAt = 0;
   let room = null;
   let roomCode = null;
   const sendError = (m) => { try { ws.send(JSON.stringify({ type: 'error', message: m })); } catch {} };
@@ -300,6 +302,27 @@ wss.on('connection', (ws) => {
     }
 
     if (!playerId) { sendError('请先加入房间'); return; }
+
+    // 局内快捷语 / 表情弹幕（白名单 + 冷却，避免刷屏）
+    if (msg.type === 'quick_chat') {
+      const now = Date.now();
+      if (now - lastChatAt < CHAT_COOLDOWN_MS) return;      // 冷却期内静默丢弃
+      const text = String(msg.text || '').slice(0, 20);
+      const isEmoji = QUICK_EMOJIS.includes(text);
+      const isPhrase = QUICK_PHRASES.includes(text);
+      if (!isEmoji && !isPhrase) { sendError('快捷语不在可选列表里'); return; }
+      lastChatAt = now;
+      const me = room.players.get(playerId);
+      room.broadcast(JSON.stringify({
+        type: 'chat',
+        kind: isEmoji ? 'emoji' : 'text',
+        text,
+        name: me ? me.name : '观众',
+        color: me ? me.color : '#8a8ab0',
+      }));
+      return;
+    }
+
     if (isSpectator) return;
 
     switch (msg.type) {

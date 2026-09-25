@@ -38,13 +38,16 @@ function connect() {
     const waiters = [];
     ws.on('message', (raw) => {
       const m = JSON.parse(raw.toString());
+      (ws._seen = ws._seen || []).push(m);
       const i = waiters.findIndex(w => w.type === m.type);
       if (i >= 0) { const w = waiters.splice(i, 1)[0]; clearTimeout(w.t); w.resolve(m); }
       else queue.push(m);
     });
     ws.on('open', () => resolve({
       ws,
+      seen: () => ws._seen || [],
       send: (o) => ws.send(JSON.stringify(o)),
+      sendRaw: (s) => ws.send(s),
       wait(type, timeout = 5000) {
         const i = queue.findIndex(m => m.type === type);
         if (i >= 0) return Promise.resolve(queue.splice(i, 1)[0]);
@@ -169,6 +172,54 @@ test('心跳：服务端定期发 ping，不回应会被断开', async () => {
     setTimeout(() => { if (!done) { done = true; resolve(false); } }, 4000);
   });
   assert.ok(closed, '不回 pong 的半开连接应被服务端断开');
+});
+
+test('快捷语：白名单校验 + 房间广播 + 冷却限流', async () => {
+  const a = await connect();
+  a.send({ type: 'create_room' });
+  const code = (await a.wait('room_created')).roomCode;
+  a.send({ type: 'join', name: '甲', roomCode: code });
+  await a.wait('welcome');
+  const b = await connect();
+  b.send({ type: 'join', name: '乙', roomCode: code });
+  await b.wait('welcome');
+
+  const chatsOf = (c) => c.seen().filter(m => m.type === 'chat');
+  const errorsOf = (c) => c.seen().filter(m => m.type === 'error');
+
+  // 1) 快捷语广播给同房所有人
+  a.send({ type: 'quick_chat', text: '手下留情！' });
+  await sleep(400);
+  const first = chatsOf(b)[0];
+  assert.ok(first, '同伴应收到 chat');
+  assert.equal(first.kind, 'text');
+  assert.equal(first.text, '手下留情！');
+  assert.equal(first.name, '甲');
+  assert.ok(first.color, '应带玩家颜色标识');
+
+  // 2) 表情走 emoji 类型（等过 700ms 冷却）
+  await sleep(750);
+  a.send({ type: 'quick_chat', text: '🎉' });
+  await sleep(400);
+  const second = chatsOf(b)[1];
+  assert.ok(second && second.kind === 'emoji', '表情应以 emoji 类型广播');
+
+  // 3) 冷却期内再发不广播（紧随第 2 条）
+  const before = chatsOf(b).length;
+  a.send({ type: 'quick_chat', text: '好耶！' });
+  await sleep(300);
+  assert.equal(chatsOf(b).length, before, '冷却期内不应再广播');
+
+  // 4) 非白名单内容被拒（等冷却过去）
+  await sleep(600);
+  a.send({ type: 'quick_chat', text: '随便乱打的内容' });
+  await sleep(400);
+  const err = errorsOf(a).pop();
+  assert.ok(err, '非白名单内容应收到错误');
+  assert.match(err.message, /快捷语/);
+  assert.equal(chatsOf(b).length, before, '被拒内容不应广播');
+
+  a.close(); b.close();
 });
 
 test('WebSocket：房间不存在时返回友好错误', async () => {
