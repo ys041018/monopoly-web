@@ -31,6 +31,7 @@ const MIME = {
   '.ico': 'image/x-icon',
   '.txt': 'text/plain; charset=utf-8',
   '.woff2': 'font/woff2',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
 };
 
 // 文本类资源才压缩；结果按 路径|mtime|编码 缓存，避免每次请求重复压缩
@@ -104,7 +105,7 @@ const httpServer = createServer((req, res) => {
   }
 
   // 只允许前端资源目录，服务端源码/配置文件一律不对外（顺带阻断 ../ 穿越）
-  const ALLOWED = ['/index.html', '/css/', '/js/', '/assets/'];
+  const ALLOWED = ['/index.html', '/css/', '/js/', '/assets/', '/sw.js', '/manifest.webmanifest'];
   if (!ALLOWED.some((p) => (p.endsWith('/') ? urlPath.startsWith(p) : urlPath === p))) {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Not Found');
@@ -129,7 +130,9 @@ const httpServer = createServer((req, res) => {
     const etag = 'W/"' + st.size.toString(16) + '-' + Math.floor(st.mtimeMs).toString(16) + '"';
     const headers = {
       'Content-Type': type,
-      'Cache-Control': filePath.startsWith(assetsDir + sep) ? 'public, max-age=31536000, immutable' : 'no-cache',
+      'Cache-Control': urlPath === '/sw.js'
+        ? 'no-cache'
+        : (filePath.startsWith(assetsDir + sep) ? 'public, max-age=31536000, immutable' : 'no-cache'),
       'ETag': etag,
       'Last-Modified': st.mtime.toUTCString(),
       'Vary': 'Accept-Encoding',
@@ -285,6 +288,19 @@ wss.on('connection', (ws, req) => {
     }
 
     // 个人主页：资料 + 战绩 + 排名 + 排行榜
+    // 前端错误上报：写进服务端日志（Render 里可直接查），每连接每分钟最多 5 条
+    if (msg.type === 'client_error') {
+      const now = Date.now();
+      if (!ws._errWindow || now > ws._errWindow) { ws._errWindow = now + 60000; ws._errCount = 0; }
+      if (ws._errCount < 5) {
+        ws._errCount += 1;
+        const text = String(msg.message || '(空)').slice(0, 300);
+        const where = String(msg.where || '').slice(0, 120);
+        console.error('[client] ' + text + (where ? ' @ ' + where : ''));
+      }
+      return;
+    }
+
     if (msg.type === 'get_profile') {
       if (!dbReady()) { sendJSON({ type: 'profile', unavailable: true }); return; }
       try {
@@ -617,6 +633,14 @@ if (dbReady()) {
   pruneSessions().catch((e) => console.error('[prune]', e.message));
   setInterval(() => { pruneSessions().catch((e) => console.error('[prune]', e.message)); }, 6 * 3600 * 1000).unref();
 }
+
+// 进程级兜底：把崩溃写进日志（Render 日志里能搜到），避免静默退出
+process.on('uncaughtException', (e) => {
+  console.error('[uncaught]', (e && e.stack) || e);
+});
+process.on('unhandledRejection', (r) => {
+  console.error('[unhandledRejection]', (r && r.stack) || r);
+});
 
 const PORT = process.env.PORT || 4000;
 httpServer.listen(PORT, '0.0.0.0', () => {

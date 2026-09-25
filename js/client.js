@@ -3,10 +3,35 @@
 // ============================================================
 import { render, animateMove, animateDice, onTileClick, setBoardTheme, setActiveMap } from './board2d.js';
 
+// ---------- 前端错误上报 ----------
+// 上报到服务端日志（Render 里可直接检索）+ 界面轻提示，不再把报错写进"轮到谁"那行
+function reportClientError(message, where) {
+  try { ws.send(JSON.stringify({ type: 'client_error', message: String(message || '').slice(0, 300), where: String(where || '').slice(0, 120) })); } catch {}
+  let toast = document.getElementById('error-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'error-toast';
+    toast.className = 'error-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = '⚠️ 出现异常：' + message + (where ? '（' + where + '）' : '');
+  toast.classList.remove('hidden');
+  clearTimeout(reportClientError._timer);
+  reportClientError._timer = setTimeout(() => toast.classList.add('hidden'), 6000);
+}
+
 window.addEventListener('error', (e) => {
-  const t = document.getElementById('turn-sub');
-  if (t) t.textContent = '⚠️ ' + (e.message || '未知错误') + ' @ ' + (e.filename||'').split('/').pop() + ':' + e.lineno;
+  const where = ((e.filename || '').split('/').pop() || '') + ':' + (e.lineno || 0);
+  reportClientError(e.message || '未知错误', where);
 });
+window.addEventListener('unhandledrejection', (e) => {
+  reportClientError((e.reason && (e.reason.message || e.reason)) || '未处理的 Promise 异常', 'promise');
+});
+
+// E2E/调试用：向本机客户端注入一条服务端消息（不影响服务器状态）
+window.__monopoly = {
+  feed: (msg) => { try { ws.onmessage({ data: JSON.stringify(msg) }); } catch (e) { console.error(e); } },
+};
 import { GROUPS } from './data/tiles.js';
 import { getMap } from './data/maps.js';
 let activeTiles = getMap('standard').tiles;
@@ -118,6 +143,13 @@ setInterval(() => {
 }, 20000);
 
 conn.connect();
+
+// PWA：注册 Service Worker（仅 https / localhost 生效）
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('SW 注册失败', e.message));
+  });
+}
 
 const $ = (id) => document.getElementById(id);
 const lobby = $('lobby'), game = $('game');
@@ -619,6 +651,7 @@ function refresh() {
   updateActions();
   renderTradeOffer();
   refreshDrawer();
+  syncAuctionModal();
   detectSound();
   detectCard();
 }
@@ -641,6 +674,14 @@ function hideAllActions() {
   [rollBtn, buyBtn, skipBuyBtn, endTurnBtn, buildBtn, mortgageBtn, tradeBtn, bailBtn, jailcardBtn].forEach(b => b.classList.add('hidden'));
   [buildPanel, mortgagePanel, auctionPanel].forEach(p => p.classList.add('hidden'));
   waitingTip.classList.add('hidden');
+}
+
+// 拍卖阶段自动弹出，结束自动关闭
+function syncAuctionModal() {
+  const modal = document.getElementById('auction-modal');
+  if (!modal) return;
+  const inAuction = !!(state && state.phase === 'auction' && state.auction);
+  modal.classList.toggle('hidden', !inAuction);
 }
 
 function updateActions() {
@@ -686,9 +727,17 @@ function updateActions() {
 
 function updateAuctionTimer() {
   const el = document.getElementById('auction-timer');
-  if (!el || !state || !state.auction) return;
-  const remain = Math.max(0, Math.ceil((state.auction.deadline - Date.now()) / 1000));
-  el.textContent = '⏳ 倒计时：' + remain + ' 秒';
+  const fill = document.getElementById('auction-bar-fill');
+  if (!state || !state.auction) return;
+  const a = state.auction;
+  const total = a.duration || 15000;
+  const left = Math.max(0, a.deadline - Date.now());
+  if (el) el.textContent = '⏳ 剩余 ' + Math.ceil(left / 1000) + ' 秒';
+  if (fill) {
+    const pct = Math.max(0, Math.min(100, (left / total) * 100));
+    fill.style.width = pct.toFixed(1) + '%';
+    fill.classList.toggle('urgent', pct < 34);
+  }
 }
 
 setInterval(() => {
@@ -876,7 +925,14 @@ function renderTradePanel() {
     const rt = theirBox.querySelectorAll('input:checked').length;
     const gm = Number(moneyGive.value) || 0;
     const rm = Number(moneyGet.value) || 0;
-    summary.textContent = '我给出 ' + gt + ' 块地 + ¥' + gm + '，换对方 ' + rt + ' 块地 + ¥' + rm;
+    const giveValue = sumChecked(myBox) + gm;
+    const getValue = sumChecked(theirBox) + rm;
+    const diff = getValue - giveValue;
+    const judge = Math.abs(diff) <= Math.max(50, getValue * 0.1)
+      ? '大致公平'
+      : (diff > 0 ? '你赚约 ¥' + diff : '你亏约 ¥' + (-diff));
+    summary.textContent = '我给出 ' + gt + ' 块地 + ¥' + gm + '（约 ¥' + giveValue + '），换对方 '
+      + rt + ' 块地 + ¥' + rm + '（约 ¥' + getValue + '）· ' + judge;
   };
   [myBox, theirBox, moneyGive, moneyGet].forEach(el => el.addEventListener('change', upd));
   upd();
@@ -912,13 +968,21 @@ function renderAuctionPanel() {
   const bidder = a.currentBidder ? state.players.find(p => p.id === a.currentBidder) : null;
   const title = document.createElement('div');
   title.className = 'p-title';
-  title.textContent = '🔨 公开拍卖：' + tile.name + '（原价 ¥' + tilePrice(tile) + '）';
+  title.textContent = '拍品：' + tile.name + '（原价 ¥' + tilePrice(tile) + '）';
   auctionPanel.appendChild(title);
   const info = document.createElement('div');
   info.className = 'offer-box';
   info.textContent = '当前价 ¥' + a.currentBid + (bidder ? '（' + bidder.name + ' 出价）' : '（无人出价）');
   auctionPanel.appendChild(info);
-  // 倒计时
+  // 倒计时进度条
+  const barWrap = document.createElement('div');
+  barWrap.className = 'auction-bar';
+  const bar = document.createElement('div');
+  bar.className = 'auction-bar-fill';
+  bar.id = 'auction-bar-fill';
+  barWrap.appendChild(bar);
+  auctionPanel.appendChild(barWrap);
+
   const timer = document.createElement('div');
   timer.className = 'auction-timer';
   timer.id = 'auction-timer';
@@ -931,11 +995,21 @@ function renderAuctionPanel() {
     const input = document.createElement('input');
     input.type = 'number';
     input.min = a.currentBid + 1;
+    input.value = String(a.currentBid + 10);
     input.placeholder = '出价（> ¥' + a.currentBid + '）';
     const btn = mkBtn('出价', 'start');
     btn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'bid', amount: Number(input.value) })));
     row.appendChild(input); row.appendChild(btn);
     auctionPanel.appendChild(row);
+
+    const quick = document.createElement('div');
+    quick.className = 'auction-quick';
+    [10, 50, 100].forEach((step) => {
+      const b = mkBtn('+' + step, 'ghost');
+      b.addEventListener('click', () => ws.send(JSON.stringify({ type: 'bid', amount: a.currentBid + step })));
+      quick.appendChild(b);
+    });
+    auctionPanel.appendChild(quick);
   }
 }
 
@@ -1175,6 +1249,19 @@ function renderLoanPanel() {
     hint.textContent = '只能在自己回合借贷';
     loanPanel.appendChild(hint);
   }
+}
+
+// 估算一组勾选地产的价值（地价 + 房屋投入，不含垄断溢价）
+function sumChecked(box) {
+  let sum = 0;
+  box.querySelectorAll('input:checked').forEach((el) => {
+    const id = Number(el.value);
+    const t = activeTiles[id];
+    if (!t) return;
+    sum += tilePrice(t);
+    sum += (state.tileHouses[id] || 0) * (GROUPS[t.group] ? GROUPS[t.group].houseCost : 100);
+  });
+  return sum;
 }
 
 // ---------- 工具 ----------

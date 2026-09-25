@@ -463,7 +463,7 @@ export class GameRoom {
     this.state.pendingTile = null;
     this.state.lastMove = null;
     this.state.auctionQueue = null;
-    this.state.auction = { tileId, currentBid: 0, currentBidder: null, deadline: Date.now() + 15000 };
+    this.state.auction = { tileId, currentBid: 0, currentBidder: null, deadline: Date.now() + 15000, duration: 15000 };
     this.broadcastState();
     this.scheduleAuctionEnd();
     return { ok: true };
@@ -480,7 +480,8 @@ export class GameRoom {
     if (player.money < bidAmount) return { error: '现金不足' };
     this.state.auction.currentBid = bidAmount;
     this.state.auction.currentBidder = playerId;
-    this.state.auction.deadline = Date.now() + 15000;
+    this.state.auction.deadline = Date.now() + 15000;   // 每次出价重置倒计时
+    this.state.auction.duration = 15000;
     this.addLog(player.name + ' 出价 ¥' + bidAmount);
     this.broadcastState();
     this.scheduleAuctionEnd();

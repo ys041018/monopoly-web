@@ -6,6 +6,7 @@ import { WebSocket } from 'ws';
 
 let child;
 let port;
+let serverErr = '';
 
 function freePort() {
   return new Promise((resolve) => {
@@ -73,8 +74,9 @@ before(async () => {
       ROOM_GC_MS: '300',             // 房间回收加速
       AUTH_RATE_LIMIT: '3',          // 限流阈值调低，便于测试
     }),
-    stdio: 'ignore',
+    stdio: ['ignore', 'ignore', 'pipe'],
   });
+  child.stderr.on('data', (d) => { serverErr += d.toString(); });
   const okStart = await waitHealthy(port);
   assert.ok(okStart, '服务未能在 10 秒内启动（端口 ' + port + '）');
 });
@@ -362,6 +364,39 @@ test('个人主页/排行榜：未配置账号服务时优雅降级', async () =
   c.send({ type: 'get_leaderboard' });
   const lb = await c.wait('leaderboard');
   assert.ok(Array.isArray(lb.rows), '排行榜应返回数组');
+  c.close();
+});
+
+test('PWA：Service Worker 与 manifest 可访问且 MIME 正确', async () => {
+  const sw = await fetch('http://127.0.0.1:' + port + '/sw.js');
+  assert.equal(sw.status, 200, 'sw.js 应可访问');
+  assert.match(sw.headers.get('content-type') || '', /javascript/, 'sw.js 类型');
+  assert.match(sw.headers.get('cache-control') || '', /no-cache/, 'sw.js 不应被长缓存');
+  const body = await sw.text();
+  assert.match(body, /addEventListener\('fetch'/, 'SW 应注册 fetch 处理');
+
+  const mf = await fetch('http://127.0.0.1:' + port + '/manifest.webmanifest');
+  assert.equal(mf.status, 200, 'manifest 应可访问');
+  assert.match(mf.headers.get('content-type') || '', /manifest\+json/, 'manifest 类型');
+  const json = await mf.json();
+  assert.ok(json.name && json.start_url && json.icons.length >= 2, 'manifest 字段完整');
+
+  for (const icon of ['/assets/icon-192.png', '/assets/icon-512.png']) {
+    const r = await fetch('http://127.0.0.1:' + port + icon);
+    assert.equal(r.status, 200, icon + ' 应可访问');
+  }
+});
+
+test('前端错误上报：写进服务端日志且有速率限制', async () => {
+  const before = (serverErr.match(/\[client\]/g) || []).length;
+  const c = await connect();
+  for (let i = 0; i < 9; i++) {
+    c.send({ type: 'client_error', message: '测试错误 ' + i, where: 'unit:1' });
+  }
+  await sleep(500);
+  const after = (serverErr.match(/\[client\]/g) || []).length;
+  assert.ok(after > before, '应记录到服务端日志');
+  assert.ok(after - before <= 5, '每连接每分钟最多记 5 条，实际 ' + (after - before));
   c.close();
 });
 

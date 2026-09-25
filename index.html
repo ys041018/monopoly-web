@@ -6,6 +6,8 @@
   <meta name="theme-color" content="#b7e6ff">
   <title>大富翁 - 网页联机版</title>
   <link rel="stylesheet" href="css/style.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
 </head>
 <body>
   <button id="sound-toggle" class="sound-toggle" title="音效开关">🔊</button>
@@ -123,9 +125,8 @@
 
         <!-- 功能面板改为弹窗，侧栏只保留入口按钮 -->
 
-        <!-- 交易邀请 / 拍卖可能随时弹出，放在抽屉外 -->
+        <!-- 交易邀请可能随时弹出，放在抽屉外 -->
         <div id="trade-offer" class="panel hidden"></div>
-        <div id="auction-panel" class="panel hidden"></div>
 
         <!-- 玩家列表 -->
         <div class="side-card">
@@ -164,6 +165,14 @@
   </div>
 
   <div id="card-popup" class="card-popup hidden"><div id="card-popup-inner" class="card-popup-inner"><div id="card-popup-title" class="card-popup-title"></div><div id="card-popup-text" class="card-popup-text"></div></div></div>
+  <div id="auction-modal" class="modal hidden">
+    <div class="modal-card auction-modal-card">
+      <div class="drawer-head">
+        <span class="drawer-title">🔨 公开拍卖</span>
+      </div>
+      <div id="auction-panel" class="auction-panel"></div>
+    </div>
+  </div>
   <div id="profile-modal" class="modal hidden">
     <div class="modal-card profile-modal-card">
       <div class="drawer-head">
