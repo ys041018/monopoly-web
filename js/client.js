@@ -135,6 +135,7 @@ const rollBtn = $('roll-btn'), buyBtn = $('buy-btn'), skipBuyBtn = $('skip-buy-b
 const buildBtn = $('build-btn'), mortgageBtn = $('mortgage-btn'), tradeBtn = $('trade-btn'), stockBtn = $('stock-btn'), loanBtn = $('loan-btn');
 const bailBtn = $('bail-btn'), jailcardBtn = $('jailcard-btn');
 const buildPanel = $('build-panel'), mortgagePanel = $('mortgage-panel'), tradePanel = $('trade-panel'), tradeOffer = $('trade-offer'), auctionPanel = $('auction-panel'), stockPanel = $('stock-panel'), loanPanel = $('loan-panel');
+const drawer = $('drawer'), drawerTitle = $('drawer-title'), drawerClose = $('drawer-close');
 const waitingTip = $('waiting-tip'), diceDisplay = $('dice-display');
 const lobbyMsg = $('lobby-msg'), playerList = $('player-list'), playerCount = $('player-count');
 const gamePlayerList = $('game-player-list'), gamePlayerCount = $('game-player-count');
@@ -207,19 +208,48 @@ jailcardBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'use_
 buyBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'buy_property' })));
 skipBuyBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'skip_buy' })));
 endTurnBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'end_turn' })));
-buildBtn.addEventListener('click', () => { toggle(buildPanel); if (!buildPanel.classList.contains('hidden')) renderBuildPanel(); });
-mortgageBtn.addEventListener('click', () => { toggle(mortgagePanel); if (!mortgagePanel.classList.contains('hidden')) renderMortgagePanel(); });
-tradeBtn.addEventListener('click', () => { toggle(tradePanel); if (!tradePanel.classList.contains('hidden')) renderTradePanel(); });
-stockBtn.addEventListener('click', () => {
-  if (loanPanel) loanPanel.classList.add('hidden');
-  toggle(stockPanel);
-  if (!stockPanel.classList.contains('hidden')) renderStockPanel();
+// ---------- 抽屉：同一时间只开一个功能面板 ----------
+const DRAWERS = {
+  build: { btn: buildBtn, panel: buildPanel, title: '🏗️ 房产 / 盖房', render: () => renderBuildPanel() },
+  mortgage: { btn: mortgageBtn, panel: mortgagePanel, title: '🏦 抵押 / 赎回', render: () => renderMortgagePanel() },
+  trade: { btn: tradeBtn, panel: tradePanel, title: '🤝 发起交易', render: () => renderTradePanel() },
+  stock: { btn: stockBtn, panel: stockPanel, title: '📈 股市', render: () => renderStockPanel() },
+  loan: { btn: loanBtn, panel: loanPanel, title: '🏦 银行贷款', render: () => renderLoanPanel() },
+};
+let openDrawerKind = null;
+
+function openDrawer(kind) {
+  const d = DRAWERS[kind];
+  if (!d || !drawer) return;
+  openDrawerKind = kind;
+  Object.values(DRAWERS).forEach((x) => x.panel && x.panel.classList.add('hidden'));
+  if (d.panel) d.panel.classList.remove('hidden');
+  if (drawerTitle) drawerTitle.textContent = d.title;
+  drawer.classList.remove('hidden');
+  drawer.scrollIntoView({ block: 'nearest' });
+  d.render();
+}
+
+function closeDrawer() {
+  openDrawerKind = null;
+  if (drawer) drawer.classList.add('hidden');
+  Object.values(DRAWERS).forEach((x) => x.panel && x.panel.classList.add('hidden'));
+}
+
+// 状态更新后重绘当前抽屉，避免面板内容过期
+function refreshDrawer() {
+  if (!openDrawerKind) return;
+  const d = DRAWERS[openDrawerKind];
+  if (d && d.panel && !d.panel.classList.contains('hidden')) d.render();
+}
+
+Object.entries(DRAWERS).forEach(([kind, d]) => {
+  if (d.btn) d.btn.addEventListener('click', () => {
+    if (openDrawerKind === kind && drawer && !drawer.classList.contains('hidden')) closeDrawer();
+    else openDrawer(kind);
+  });
 });
-if (loanBtn) loanBtn.addEventListener('click', () => {
-  if (stockPanel) stockPanel.classList.add('hidden');
-  toggle(loanPanel);
-  if (!loanPanel.classList.contains('hidden')) renderLoanPanel();
-});
+if (drawerClose) drawerClose.addEventListener('click', closeDrawer);
 
 authLoginBtn.addEventListener('click', () => {
   if (!authUser.value.trim() || !authPass.value) { authMsg.textContent = '请输入用户名和密码'; authMsg.className = 'msg error'; return; }
@@ -377,6 +407,7 @@ function enterGame() {
   tradePanel.classList.add('hidden');
   const chatBox = document.getElementById('chat-box');
   if (chatBox) chatBox.classList.remove('hidden');
+  closeDrawer();
   animatedMoveSeq = moveKey(state.lastMove);   // 进入/重连直接呈现当前局面，不重放本回合移动
   lastSoundLog = state.log && state.log.length ? state.log[state.log.length - 1] : null;
   render(state);
@@ -415,8 +446,7 @@ function refresh() {
   updateTurnInfo();
   updateActions();
   renderTradeOffer();
-  renderStockPanel();
-  renderLoanPanel();
+  refreshDrawer();
   detectSound();
   detectCard();
 }
@@ -426,6 +456,7 @@ function backToLobby() {
   document.body.removeAttribute('data-map');   // 回大厅恢复默认背景
   const chatBox = document.getElementById('chat-box');
   if (chatBox) chatBox.classList.add('hidden');
+  closeDrawer();
   game.classList.add('hidden');
   lobby.classList.remove('hidden');
   renderPlayers();

@@ -120,30 +120,44 @@
           <div id="dice-display" class="dice-display"></div>
         </div>
 
-        <!-- 操作按钮 -->
-        <div class="side-card">
+        <!-- 主操作：永远在最前，不因功能面板展开而位移 -->
+        <div class="side-card action-card">
           <div class="action-btns">
             <button id="roll-btn" class="btn primary big hidden">🎲 掷骰子</button>
             <button id="bail-btn" class="btn start hidden">💰 付 ¥50 出狱</button>
             <button id="jailcard-btn" class="btn ghost hidden">🃏 使用出狱卡</button>
             <button id="buy-btn" class="btn start big hidden">买下这块地</button>
             <button id="skip-buy-btn" class="btn ghost hidden">不买，跳过</button>
-            <button id="build-btn" class="btn primary big hidden">🏗️ 盖房</button>
-            <button id="mortgage-btn" class="btn ghost hidden">🏦 抵押 / 赎回</button>
-            <button id="trade-btn" class="btn ghost hidden">🤝 发起交易</button>
-            <button id="stock-btn" class="btn ghost hidden">📈 股市</button>
-            <button id="loan-btn" class="btn ghost hidden">🏦 贷款</button>
             <button id="end-turn-btn" class="btn primary big hidden">结束回合</button>
-            <div id="build-panel" class="build-panel hidden"></div>
-            <div id="mortgage-panel" class="panel hidden"></div>
-            <div id="trade-panel" class="panel hidden"></div>
-            <div id="stock-panel" class="panel hidden"></div>
-            <div id="loan-panel" class="panel hidden"></div>
-            <div id="trade-offer" class="panel hidden"></div>
-            <div id="auction-panel" class="panel hidden"></div>
             <div id="waiting-tip" class="waiting-tip hidden">等待其他玩家操作...</div>
           </div>
         </div>
+
+        <!-- 功能入口：一行小按钮，点开后在下方抽屉里操作 -->
+        <div class="side-card entry-row">
+          <button id="build-btn" class="entry-btn hidden" type="button">🏗️ 房产</button>
+          <button id="mortgage-btn" class="entry-btn hidden" type="button">🏦 抵押</button>
+          <button id="trade-btn" class="entry-btn hidden" type="button">🤝 交易</button>
+          <button id="stock-btn" class="entry-btn hidden" type="button">📈 股市</button>
+          <button id="loan-btn" class="entry-btn hidden" type="button">🏦 贷款</button>
+        </div>
+
+        <!-- 抽屉：同一时间只显示一个功能面板 -->
+        <div id="drawer" class="side-card drawer hidden">
+          <div class="drawer-head">
+            <span id="drawer-title" class="drawer-title">功能</span>
+            <button id="drawer-close" class="btn ghost drawer-close" type="button">关闭</button>
+          </div>
+          <div id="build-panel" class="build-panel hidden"></div>
+          <div id="mortgage-panel" class="panel hidden"></div>
+          <div id="trade-panel" class="panel hidden"></div>
+          <div id="stock-panel" class="panel hidden"></div>
+          <div id="loan-panel" class="panel hidden"></div>
+        </div>
+
+        <!-- 交易邀请 / 拍卖可能随时弹出，放在抽屉外 -->
+        <div id="trade-offer" class="panel hidden"></div>
+        <div id="auction-panel" class="panel hidden"></div>
 
         <!-- 玩家列表 -->
         <div class="side-card">
@@ -158,7 +172,10 @@
           <summary>💬 快捷语 / 表情</summary>
           <div id="chat-grid" class="chat-grid"></div>
         </details>
-        <button id="hotkey-btn" class="btn ghost">⌨️ 快捷键</button>
+        <div class="side-foot">
+          <button id="hotkey-btn" class="btn ghost" type="button">⌨️ 快捷键</button>
+          <button id="lobby-btn" class="btn ghost" type="button">回到大厅</button>
+        </div>
         <div id="hotkey-panel" class="hotkey-panel hidden">
           <div><kbd>空格</kbd>掷骰子</div>
           <div><kbd>B</kbd>买地</div>
@@ -167,7 +184,6 @@
           <div><kbd>M</kbd>抵押 / 赎回</div>
           <div><kbd>T</kbd>发起交易</div>
         </div>
-        <button id="lobby-btn" class="btn ghost">回到大厅</button>
       </aside>
 
       <!-- 游戏日志（最右列，不遮挡操作区） -->

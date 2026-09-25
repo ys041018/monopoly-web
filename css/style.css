@@ -392,6 +392,32 @@ select,.theme-select{cursor:pointer;}
   .join-row{gap:8px;}
 }
 
+
+/* ---------- 侧栏信息层级：状态 → 主操作 → 入口 → 抽屉 → 玩家 → 工具 ---------- */
+.action-card { padding: 12px; }
+.entry-row {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 10px;
+}
+.entry-btn {
+  flex: 1 1 auto; min-width: 76px;
+  border: 2.5px solid var(--ink); border-radius: 999px; background: var(--paper-3);
+  color: var(--ink); font-family: inherit; font-size: 12.5px; font-weight: 900;
+  padding: 7px 10px; cursor: pointer; box-shadow: 0 3px 0 var(--ink);
+  touch-action: manipulation;
+}
+.entry-btn:hover:not(:disabled) { transform: translateY(-1px); background: #fff; }
+.entry-btn:active:not(:disabled) { transform: translateY(1px); box-shadow: 0 1px 0 var(--ink); }
+.entry-btn:disabled { opacity: .5; }
+.drawer { padding: 12px 13px; }
+.drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.drawer-title { font-size: 14px; font-weight: 900; }
+.drawer-close { padding: 5px 12px; font-size: 12.5px; box-shadow: 0 3px 0 var(--ink); }
+.side-foot { display: flex; gap: 8px; }
+.side-foot .btn { flex: 1; padding: 9px 10px; font-size: 13px; box-shadow: 0 3px 0 var(--ink); }
+/* 玩家列表压缩：侧栏空间优先给操作区 */
+.side .player-list { max-height: 168px; overflow-y: auto; gap: 6px; }
+.side .player-list li { padding: 6px 10px; font-size: 13px; }
+
 /* ============================================================
    移动端优化
    核心问题：手机上一屏放不下"棋盘 + 操作区"，玩家点按钮时看不到棋盘。
@@ -419,7 +445,7 @@ button, .btn, .qty-btn, .sound-toggle { touch-action: manipulation; }
   /* 给底部固定操作栏留出空间 */
   #game { padding-bottom: 200px; }
   /* 操作区脱离文档流后，原来包着它的卡片会变成一个空壳，抹掉它的外观 */
-  .side-card:has(> .action-btns) { background: transparent; border: none; box-shadow: none; padding: 0; }
+  .action-card:has(> .action-btns) { background: transparent; border: none; box-shadow: none; padding: 0; }
   .action-btns > .panel,
   .action-btns > .build-panel,
   .action-btns > #waiting-tip,
@@ -441,6 +467,8 @@ button, .btn, .qty-btn, .sound-toggle { touch-action: manipulation; }
   .log-list li { padding: 5px 8px; }
 
   .panel, .build-panel { max-height: 34vh; }
+  .entry-row { padding: 8px; }
+  .entry-btn { min-width: 68px; font-size: 12px; padding: 6px 9px; }
   .sound-toggle { width: 34px; height: 34px; font-size: 16px; opacity: .92; }
 }
 
