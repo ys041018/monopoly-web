@@ -225,7 +225,7 @@ select,.theme-select{cursor:pointer;}
   border:5px solid var(--ink);border-radius:28px;background:#eaf7ff;
   box-shadow:0 8px 0 rgba(47,50,101,.85);
 }
-.side{display:flex;flex-direction:column;gap:12px;width:260px;min-height:0;overflow:hidden;}
+.side{display:flex;flex-direction:column;gap:12px;width:300px;min-height:0;overflow:hidden;}
 
 .turn-card{
   background:linear-gradient(180deg,#fff3bf,#ffe07a);
@@ -296,7 +296,7 @@ select,.theme-select{cursor:pointer;}
 
 /* ---------- 日志 ---------- */
 .log-panel{
-  width:270px;flex:none;display:flex;flex-direction:column;gap:8px;
+  width:250px;flex:none;display:flex;flex-direction:column;gap:8px;
   background:#fffbe8;border:4px solid var(--ink);border-radius:26px;padding:14px 14px;
   box-shadow:0 8px 0 rgba(47,50,101,.55);
 }
@@ -372,9 +372,9 @@ select,.theme-select{cursor:pointer;}
 
 /* ---------- 响应式 ---------- */
 @media (max-width:1180px){
-  #board{width:min(calc(100vw - 600px),calc(100vh - 48px));}
-  .log-panel{width:230px;}
-  .side{width:242px;}
+  #board{width:min(calc(100vw - 570px),calc(100vh - 48px));}
+  .log-panel{width:220px;}
+  .side{width:268px;}
 }
 @media (max-width:980px){
   .screen{align-items:flex-start;height:auto;min-height:100vh;overflow-y:auto;padding:8px;}
@@ -393,6 +393,13 @@ select,.theme-select{cursor:pointer;}
 }
 
 
+/* ---------- 功能操作弹窗（股市/贷款/交易/抵押/房产） ---------- */
+.action-modal-card { max-width: 460px; }
+.action-modal-card .panel,
+.action-modal-card .build-panel { max-height: none; overflow: visible; }
+.action-modal-card .drawer-head { margin-bottom: 4px; }
+.action-modal-card .trade-tiles { max-height: 46vh; overflow-y: auto; }
+
 /* ---------- 侧栏信息层级：状态 → 主操作 → 入口 → 抽屉 → 玩家 → 工具 ---------- */
 .action-card { padding: 12px; }
 .entry-row {
@@ -408,7 +415,6 @@ select,.theme-select{cursor:pointer;}
 .entry-btn:hover:not(:disabled) { transform: translateY(-1px); background: #fff; }
 .entry-btn:active:not(:disabled) { transform: translateY(1px); box-shadow: 0 1px 0 var(--ink); }
 .entry-btn:disabled { opacity: .5; }
-.drawer { padding: 12px 13px; }
 .drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .drawer-title { font-size: 14px; font-weight: 900; }
 .drawer-close { padding: 5px 12px; font-size: 12.5px; box-shadow: 0 3px 0 var(--ink); }

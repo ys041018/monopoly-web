@@ -135,7 +135,7 @@ const rollBtn = $('roll-btn'), buyBtn = $('buy-btn'), skipBuyBtn = $('skip-buy-b
 const buildBtn = $('build-btn'), mortgageBtn = $('mortgage-btn'), tradeBtn = $('trade-btn'), stockBtn = $('stock-btn'), loanBtn = $('loan-btn');
 const bailBtn = $('bail-btn'), jailcardBtn = $('jailcard-btn');
 const buildPanel = $('build-panel'), mortgagePanel = $('mortgage-panel'), tradePanel = $('trade-panel'), tradeOffer = $('trade-offer'), auctionPanel = $('auction-panel'), stockPanel = $('stock-panel'), loanPanel = $('loan-panel');
-const drawer = $('drawer'), drawerTitle = $('drawer-title'), drawerClose = $('drawer-close');
+const actionModal = $('action-modal'), drawerTitle = $('drawer-title'), drawerClose = $('drawer-close');
 const waitingTip = $('waiting-tip'), diceDisplay = $('dice-display');
 const lobbyMsg = $('lobby-msg'), playerList = $('player-list'), playerCount = $('player-count');
 const gamePlayerList = $('game-player-list'), gamePlayerCount = $('game-player-count');
@@ -220,19 +220,18 @@ let openDrawerKind = null;
 
 function openDrawer(kind) {
   const d = DRAWERS[kind];
-  if (!d || !drawer) return;
+  if (!d || !actionModal) return;
   openDrawerKind = kind;
   Object.values(DRAWERS).forEach((x) => x.panel && x.panel.classList.add('hidden'));
   if (d.panel) d.panel.classList.remove('hidden');
   if (drawerTitle) drawerTitle.textContent = d.title;
-  drawer.classList.remove('hidden');
-  drawer.scrollIntoView({ block: 'nearest' });
+  actionModal.classList.remove('hidden');
   d.render();
 }
 
 function closeDrawer() {
   openDrawerKind = null;
-  if (drawer) drawer.classList.add('hidden');
+  if (actionModal) actionModal.classList.add('hidden');
   Object.values(DRAWERS).forEach((x) => x.panel && x.panel.classList.add('hidden'));
 }
 
@@ -244,12 +243,13 @@ function refreshDrawer() {
 }
 
 Object.entries(DRAWERS).forEach(([kind, d]) => {
-  if (d.btn) d.btn.addEventListener('click', () => {
-    if (openDrawerKind === kind && drawer && !drawer.classList.contains('hidden')) closeDrawer();
-    else openDrawer(kind);
-  });
+  if (d.btn) d.btn.addEventListener('click', () => openDrawer(kind));
 });
 if (drawerClose) drawerClose.addEventListener('click', closeDrawer);
+if (actionModal) actionModal.addEventListener('click', (e) => { if (e.target === actionModal) closeDrawer(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && openDrawerKind) closeDrawer();
+});
 
 authLoginBtn.addEventListener('click', () => {
   if (!authUser.value.trim() || !authPass.value) { authMsg.textContent = '请输入用户名和密码'; authMsg.className = 'msg error'; return; }
