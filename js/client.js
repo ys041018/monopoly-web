@@ -127,6 +127,8 @@ const hotkeyBtn = $('hotkey-btn'), hotkeyPanel = $('hotkey-panel');
 const authScreen = $('auth-screen'), authPanel = $('auth-panel'), authInfo = $('auth-info'), authUser = $('auth-user'), authPass = $('auth-pass'), authNick = $('auth-nick'), authMsg = $('auth-msg'), authName = $('auth-name');
 const authLoginBtn = $('auth-login-btn'), authRegisterBtn = $('auth-register-btn'), authLogoutBtn = $('auth-logout-btn'), authStats = $('auth-stats');
 const createRoomBtn = $('create-room-btn');
+const quickMatchBtn = $('quick-match-btn'), roomsBtn = $('rooms-btn');
+const roomsModal = $('rooms-modal'), roomsList = $('rooms-list'), roomsClose = $('rooms-close');
 const themeSelect = $('theme-select');
 const roomSettings = $('room-settings'), setMoney = $('set-money'), setRounds = $('set-rounds'), setHouse = $('set-house'), setMap = $('set-map');
 const setFast = $('set-fast'), setTeam = $('set-team'), setInterest = $('set-interest');
@@ -195,6 +197,29 @@ createRoomBtn.addEventListener('click', () => {
   if (!name) { setMsg('请先输入昵称', true); return; }
   ws.send(JSON.stringify({ type: 'create_room' }));
 });
+// ---------- 快速匹配 / 公开房间 ----------
+if (quickMatchBtn) quickMatchBtn.addEventListener('click', () => {
+  const name = nameInput.value.trim();
+  if (!name) { setMsg('请先输入昵称', true); return; }
+  setMsg('正在匹配…');
+  ws.send(JSON.stringify({ type: 'quick_match', name, token: authToken || undefined }));
+});
+if (roomsBtn) roomsBtn.addEventListener('click', () => {
+  roomsModal.classList.remove('hidden');
+  roomsList.innerHTML = '';
+  ws.send(JSON.stringify({ type: 'list_rooms' }));
+  if (!roomsTimer) roomsTimer = setInterval(() => ws.send(JSON.stringify({ type: 'list_rooms' })), 5000);
+});
+if (roomsClose) roomsClose.addEventListener('click', closeRoomsModal);
+if (roomsModal) roomsModal.addEventListener('click', (e) => { if (e.target === roomsModal) closeRoomsModal(); });
+
+let roomsTimer = null;
+
+function closeRoomsModal() {
+  if (roomsModal) roomsModal.classList.add('hidden');
+  if (roomsTimer) { clearInterval(roomsTimer); roomsTimer = null; }
+}
+
 soundToggle.addEventListener('click', () => { const on = !isSoundEnabled(); setSoundEnabled(on); soundToggle.textContent = on ? '🔊' : '🔇'; localStorage.setItem('monopoly_sound', on ? '1' : '0'); });
 copyRoomBtn.addEventListener('click', async () => { try { await navigator.clipboard.writeText(roomInput.value.trim()); copyRoomBtn.textContent = '已复制'; setTimeout(() => copyRoomBtn.textContent = '复制', 1200); } catch {} });
 lobbyBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'back_to_lobby' })));
@@ -329,6 +354,11 @@ ws.onmessage = (e) => {
   switch (msg.type) {
     case 'welcome':
       myId = msg.playerId;
+      // 记住房间码：快速匹配进已有房间、或刷新后自动重连都要用它
+      if (msg.roomCode) {
+        sessionStorage.setItem('monopoly_room', msg.roomCode);
+        if (roomInput) roomInput.value = msg.roomCode;
+      }
       isSpectator = !!msg.spectator;
       myIsHost = msg.player ? msg.player.isHost : false;
       if (!isSpectator && msg.player) {
@@ -387,6 +417,8 @@ ws.onmessage = (e) => {
       else syncGame();
       break;
     case 'chat': showBubble(msg); break;
+    case 'room_list': renderRooms(msg.rooms); break;
+
     case 'back_to_lobby': backToLobby(); break;
     case 'error':
       gotError = true;
@@ -1062,6 +1094,42 @@ function renderPlayers() {
     const numHtml = idx ? '<span class="p-index" style="background:' + p.color + '">' + idx + '</span>' : '';
     li2.innerHTML = `${numHtml}<span class="dot" style="background:${p.color}"></span><span class="p-name">${escapeHtml(p.name)}</span>${sp && sp.team ? '<span class="tag">' + sp.team + ' 队</span>' : ''}${sp && sp.bankrupt ? '<span class="tag">破产</span>' : ''}${isCur ? '<span class="tag turn">回合中</span>' : ''}<span class="p-money">¥${sp ? sp.money : 1500}</span>`;
     gamePlayerList.appendChild(li2);
+  });
+}
+
+// 公开房间列表（大厅弹窗）
+function renderRooms(rooms) {
+  if (!roomsList) return;
+  roomsList.innerHTML = '';
+  if (!rooms || rooms.length === 0) {
+    tip(roomsList, '暂时没有公开房间，点「创建房间」或「⚡ 快速匹配」开一局吧');
+    return;
+  }
+  rooms.forEach((r) => {
+    const row = document.createElement('div');
+    row.className = 'room-row';
+    const info = document.createElement('div');
+    info.className = 'room-info';
+    const title = document.createElement('div');
+    title.className = 'room-code';
+    title.textContent = r.code + (r.fastMode ? ' ⚡' : '') + (r.teamMode ? ' 🤝' : '');
+    const sub = document.createElement('div');
+    sub.className = 'room-sub';
+    sub.textContent = r.host + ' 的房间 · ' + r.mapName + ' · ' + r.players + '/' + r.capacity + (r.started ? ' · 已开局（可旁观）' : '');
+    info.appendChild(title);
+    info.appendChild(sub);
+    const btn = mkBtn(r.started ? '旁观' : '加入', r.started ? 'ghost' : 'start');
+    btn.addEventListener('click', () => {
+      const name = nameInput.value.trim();
+      if (!name) { setMsg('请先输入昵称', true); return; }
+      sessionStorage.setItem('monopoly_room', r.code);
+      roomInput.value = r.code;
+      closeRoomsModal();
+      ws.send(JSON.stringify({ type: 'join', name, roomCode: r.code, token: authToken || undefined }));
+    });
+    row.appendChild(info);
+    row.appendChild(btn);
+    roomsList.appendChild(row);
   });
 }
 

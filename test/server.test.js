@@ -222,6 +222,68 @@ test('快捷语：白名单校验 + 房间广播 + 冷却限流', async () => {
   a.close(); b.close();
 });
 
+test('公开房间列表：列出房间的人数、地图与状态', async () => {
+  const a = await connect();
+  a.send({ type: 'create_room' });
+  const code = (await a.wait('room_created')).roomCode;
+  a.send({ type: 'join', name: '甲', roomCode: code });
+  await a.wait('welcome');
+
+  const b = await connect();
+  b.send({ type: 'join', name: '乙', roomCode: code });
+  await b.wait('welcome');
+
+  const viewer = await connect();
+  viewer.send({ type: 'list_rooms' });
+  const list = (await viewer.wait('room_list')).rooms;
+  const mine = list.find(r => r.code === code);
+  assert.ok(mine, '列表应包含刚创建的房间');
+  assert.equal(mine.players, 2);
+  assert.equal(mine.started, false);
+  assert.ok(mine.mapName, '应带地图名');
+  assert.equal(mine.host, '甲');
+  a.close(); b.close(); viewer.close();
+});
+
+test('快速匹配：优先进入人数最多的未开局房间', async () => {
+  // 房间 A：2 人；房间 B：1 人
+  const a1 = await connect();
+  a1.send({ type: 'create_room' });
+  const codeA = (await a1.wait('room_created')).roomCode;
+  a1.send({ type: 'join', name: 'A1', roomCode: codeA });
+  await a1.wait('welcome');
+  const a2 = await connect();
+  a2.send({ type: 'join', name: 'A2', roomCode: codeA });
+  await a2.wait('welcome');
+
+  const b1 = await connect();
+  b1.send({ type: 'create_room' });
+  const codeB = (await b1.wait('room_created')).roomCode;
+  b1.send({ type: 'join', name: 'B1', roomCode: codeB });
+  await b1.wait('welcome');
+
+  const m = await connect();
+  m.send({ type: 'quick_match', name: '路人' });
+  const w = await m.wait('welcome');
+  assert.ok(w.playerId, '应成功加入某个房间');
+  // 确认进入的是 A 房（人更多的那个）
+  const probe = a1.seen().filter(x => x.type === 'player_list').pop();
+  assert.ok(probe, 'A 房应收到玩家列表更新');
+  const names = probe.players.map(p => p.name);
+  assert.ok(names.includes('路人'), '快速匹配应加入 A 房，实际玩家: ' + names.join(','));
+  a1.close(); a2.close(); b1.close(); m.close();
+});
+
+test('快速匹配：总能进入一个房间，且 welcome 带回房间码', async () => {
+  const m = await connect();
+  m.send({ type: 'quick_match', name: '独狼' });
+  const w = await m.wait('welcome');
+  assert.ok(w.playerId, '应成功进入房间');
+  assert.ok(w.roomCode, 'welcome 应带回房间码（前端靠它记录房间、刷新后可重连）');
+  assert.equal(w.spectator, undefined, '未开局的房间不应是旁观');
+  m.close();
+});
+
 test('WebSocket：房间不存在时返回友好错误', async () => {
   const c = await connect();
   c.send({ type: 'join', name: '路人', roomCode: 'ZZZZZZ' });

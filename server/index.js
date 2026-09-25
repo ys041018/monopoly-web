@@ -9,6 +9,8 @@ import { gzipSync, deflateSync, brotliCompressSync, constants as zlibConstants }
 import { fileURLToPath } from 'url';
 import os from 'os';
 import { GameRoom } from './game-room.js';
+import { getMap } from '../js/data/maps.js';
+import { MAX_PLAYERS } from './rules.js';
 import { QUICK_PHRASES, QUICK_EMOJIS, CHAT_COOLDOWN_MS } from '../js/data/chat.js';
 import { dbReady, findUserByUsername, createUser, createSession, findSession, deleteSession, verifyPassword, getStats } from './db.js';
 
@@ -255,27 +257,74 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    if (msg.type === 'join') {
-      if (playerId) return;
+    // 入房逻辑（join / quick_match 共用）
+    const joinRoom = async (codeRaw, name, savedPlayerId, token) => {
       let joinUserId = null;
-      if (msg.token) { const u = await findSession(String(msg.token)); if (u) joinUserId = u.id; }
-      room = getRoom(msg.roomCode);
-      if (!room) { sendError('房间不存在，请检查房间码'); return; }
-      roomCode = String(msg.roomCode || '').trim().toUpperCase();
-      const result = room.addPlayer(ws, msg.name, msg.playerId, joinUserId);
-      console.log('[加入] ' + (msg.name || '(空)') + ' 房间=' + (String(msg.roomCode || '').trim().toUpperCase() || '大厅') + ' -> ' +
+      if (token) { const u = await findSession(String(token)); if (u) joinUserId = u.id; }
+      const target = getRoom(codeRaw);
+      if (!target) { sendError('房间不存在，请检查房间码'); return false; }
+      room = target;
+      roomCode = String(codeRaw || '').trim().toUpperCase();
+      const result = room.addPlayer(ws, name, savedPlayerId, joinUserId);
+      console.log('[加入] ' + (name || '(空)') + ' 房间=' + roomCode + ' -> ' +
         (result.error ? ('拒绝: ' + result.error) : (result.spectator ? '旁观' : '成功 id=' + result.id)));
-      if (result.error) { room.sendError(ws, result.error); ws.close(); return; }
+      if (result.error) { room.sendError(ws, result.error); ws.close(); return false; }
 
       playerId = result.id;
       if (result.spectator) {
         isSpectator = true;
-        ws.send(JSON.stringify({ type: 'welcome', playerId: result.id, player: null, spectator: true }));
+        ws.send(JSON.stringify({ type: 'welcome', playerId: result.id, player: null, spectator: true, roomCode }));
         if (room.state) ws.send(JSON.stringify({ type: 'game_state', state: room.state }));
-        return;
+        return true;
       }
-      ws.send(JSON.stringify({ type: 'welcome', playerId: result.id, player: result.player }));
+      ws.send(JSON.stringify({ type: 'welcome', playerId: result.id, player: result.player, roomCode }));
       if (room.state) ws.send(JSON.stringify({ type: 'game_state', state: room.state }));
+      return true;
+    };
+
+    if (msg.type === 'join') {
+      if (playerId) return;
+      await joinRoom(msg.roomCode, msg.name, msg.playerId, msg.token);
+      return;
+    }
+
+    // 公开房间列表
+    if (msg.type === 'list_rooms') {
+      const list = [...rooms.entries()]
+        .filter(([, r]) => r.players.size > 0)
+        .map(([code, r]) => ({
+          code,
+          players: r.players.size,
+          capacity: MAX_PLAYERS,
+          started: !!r.started,
+          mapId: r.settings.mapId,
+          mapName: getMap(r.settings.mapId).name,
+          host: ((r.players.values().next().value || {}).name) || '',
+          fastMode: !!r.settings.fastMode,
+          teamMode: !!r.settings.teamMode,
+        }))
+        .sort((a, b) => (a.started === b.started ? b.players - a.players : (a.started ? 1 : -1)))
+        .slice(0, 30);
+      ws.send(JSON.stringify({ type: 'room_list', rooms: list }));
+      return;
+    }
+
+    // 快速匹配：优先进入「人最多但还能进」的房间，没有就新建
+    if (msg.type === 'quick_match') {
+      if (playerId) return;
+      const open = [...rooms.entries()]
+        .filter(([, r]) => !r.started && r.players.size > 0 && r.players.size < MAX_PLAYERS)
+        .sort((a, b) => b[1].players.size - a[1].players.size);
+      let code = open.length ? open[0][0] : null;
+      if (code) {
+        console.log('[快速匹配] 命中房间 ' + code + '（' + getRoom(code).players.size + ' 人）');
+      } else {
+        code = genCode();
+        rooms.set(code, new GameRoom());
+        ws.send(JSON.stringify({ type: 'room_created', roomCode: code }));
+        console.log('[快速匹配] 无可用房间，新建 ' + code);
+      }
+      await joinRoom(code, msg.name, undefined, msg.token);
       return;
     }
 

@@ -52,6 +52,10 @@
         <button id="create-room-btn" class="btn start">创建房间</button>
         <button id="join-btn" class="btn primary">加入房间</button>
       </div>
+      <div class="join-row">
+        <button id="quick-match-btn" class="btn" type="button">⚡ 快速匹配</button>
+        <button id="rooms-btn" class="btn ghost" type="button">🌐 公开房间</button>
+      </div>
       <div class="join-row theme-row">
         <span class="theme-label">棋盘主题</span>
         <select id="theme-select" class="theme-select">
@@ -187,6 +191,16 @@
   </div>
 
   <div id="card-popup" class="card-popup hidden"><div id="card-popup-inner" class="card-popup-inner"><div id="card-popup-title" class="card-popup-title"></div><div id="card-popup-text" class="card-popup-text"></div></div></div>
+  <div id="rooms-modal" class="modal hidden">
+    <div class="modal-card rooms-modal-card">
+      <div class="drawer-head">
+        <span class="drawer-title">🌐 公开房间</span>
+        <button id="rooms-close" class="btn ghost drawer-close" type="button">关闭</button>
+      </div>
+      <div id="rooms-list" class="rooms-list"></div>
+      <div class="trade-bal">列表每 5 秒自动刷新 · 点击房间即可加入</div>
+    </div>
+  </div>
   <div id="action-modal" class="modal hidden">
     <div class="modal-card action-modal-card">
       <div class="drawer-head">
