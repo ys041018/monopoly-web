@@ -312,6 +312,12 @@ function renderProfile(msg) {
       grid.appendChild(cell);
     });
   profileBody.appendChild(grid);
+  if (games === 0) {
+    const tipEl = document.createElement('div');
+    tipEl.className = 'trade-bal';
+    tipEl.textContent = '还没有战绩：完成一局（有人获胜或到达回合上限结算）才会记录';
+    profileBody.appendChild(tipEl);
+  }
 
   const title = document.createElement('div');
   title.className = 'p-title';
@@ -513,7 +519,8 @@ ws.onmessage = (e) => {
       sessionStorage.setItem('monopoly_room', msg.roomCode);
       roomInput.value = msg.roomCode;
       gotError = false;
-      ws.send(JSON.stringify({ type: 'join', name: nameInput.value.trim(), roomCode: msg.roomCode }));
+      // 必须带 token：否则服务端拿不到 userId，房主这一局不算战绩
+      ws.send(JSON.stringify({ type: 'join', name: nameInput.value.trim(), roomCode: msg.roomCode, token: authToken || undefined }));
       joinBtn.disabled = true;
       setMsg('已创建房间 ' + msg.roomCode + '，正在加入...');
       break;
@@ -1208,6 +1215,12 @@ function renderPlayers() {
     : '';
   playerCount.textContent = players.length + '/8';
   gamePlayerCount.textContent = players.length + '/8' + modeChips;
+  // 未登录（服务端拿不到 userId）时提示本局不计战绩
+  const guestHint = document.getElementById('guest-hint');
+  if (guestHint) {
+    const meInState = state && state.players ? state.players.find(p => p.id === myId) : null;
+    guestHint.classList.toggle('hidden', !(meInState && !meInState.userId));
+  }
   playerList.innerHTML = '';
   gamePlayerList.innerHTML = '';
   const curId = state ? state.players[state.current].id : null;
