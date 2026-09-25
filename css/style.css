@@ -650,3 +650,88 @@ button, .btn, .qty-btn, .sound-toggle { touch-action: manipulation; }
   color: #7a4a00; background: #fff8d9; border: 2.5px solid var(--ink);
   border-radius: 999px; padding: 3px 10px; display: inline-block;
 }
+
+/* ============================================================
+   演出效果（爽感）：金币飞入 / 破产爆炸 / 倒计时红晕 / 事件特写
+   ============================================================ */
+.juice-burst {
+  position: fixed; left: 50%; top: 46%; transform: translate(-50%, -50%);
+  font-size: 110px; z-index: 250; pointer-events: none;
+  animation: juiceBurst 1.15s cubic-bezier(.2, .8, .3, 1) forwards;
+  filter: drop-shadow(0 6px 0 rgba(47, 50, 101, .35));
+}
+@keyframes juiceBurst {
+  0% { transform: translate(-50%, -50%) scale(.2); opacity: 0; }
+  25% { transform: translate(-50%, -50%) scale(1.25); opacity: 1; }
+  60% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1.6); opacity: 0; }
+}
+
+.juice-coin {
+  position: absolute; bottom: 30%;
+  font-size: 26px; pointer-events: none; z-index: 12;
+  animation: coinFly 1.35s ease-out forwards;
+}
+@keyframes coinFly {
+  0% { transform: translateY(0) scale(.6) rotate(0); opacity: 0; }
+  15% { opacity: 1; }
+  70% { transform: translateY(-160px) scale(1) rotate(180deg); opacity: 1; }
+  100% { transform: translateY(-260px) scale(.9) rotate(320deg); opacity: 0; }
+}
+
+.juice-flash {
+  position: absolute; inset: 0; pointer-events: none; z-index: 11; border-radius: inherit;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 214, 90, .85), rgba(255, 214, 90, 0) 70%);
+  animation: juiceFlash .9s ease-out forwards;
+}
+@keyframes juiceFlash {
+  0% { opacity: 0; transform: scale(.9); }
+  35% { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.08); }
+}
+
+.juice-banner {
+  position: fixed; left: 50%; top: 32%; transform: translate(-50%, -50%);
+  z-index: 260; pointer-events: none; text-align: center;
+  padding: 14px 26px; border-radius: 22px;
+  background: var(--paper); border: 4px solid var(--ink);
+  box-shadow: 0 10px 0 rgba(47, 50, 101, .85);
+  animation: bannerIn 2.8s cubic-bezier(.34, 1.56, .64, 1) forwards;
+}
+.juice-banner .jb-title { font-size: 26px; font-weight: 900; color: var(--ink); }
+.juice-banner .jb-sub { font-size: 14px; font-weight: 800; color: var(--ink-2); margin-top: 2px; }
+@keyframes bannerIn {
+  0% { transform: translate(-50%, -50%) scale(.6); opacity: 0; }
+  14% { transform: translate(-50%, -50%) scale(1.06); opacity: 1; }
+  22% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  82% { opacity: 1; }
+  100% { transform: translate(-50%, -58%) scale(1); opacity: 0; }
+}
+
+body.juice-shake { animation: juiceShake .6s ease-in-out; }
+@keyframes juiceShake {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-6px, 3px); }
+  40% { transform: translate(5px, -3px); }
+  60% { transform: translate(-4px, 2px); }
+  80% { transform: translate(3px, -1px); }
+}
+
+/* 自己回合最后 5 秒：屏幕边缘红晕（呼吸） */
+body.timer-urgent::after {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 240;
+  box-shadow: inset 0 0 90px 18px rgba(220, 40, 40, .55);
+  animation: urgentPulse 1s ease-in-out infinite;
+}
+@keyframes urgentPulse {
+  0%, 100% { opacity: .45; }
+  50% { opacity: .95; }
+}
+
+/* 抽卡翻牌：3D 翻转 + 轻微回弹 */
+.card-popup-inner.flip-in { animation: cardFlip .5s cubic-bezier(.34, 1.4, .64, 1) both; }
+@keyframes cardFlip {
+  0% { transform: perspective(900px) rotateY(-92deg) scale(.92); opacity: .2; }
+  60% { transform: perspective(900px) rotateY(8deg) scale(1.02); opacity: 1; }
+  100% { transform: perspective(900px) rotateY(0) scale(1); opacity: 1; }
+}

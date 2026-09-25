@@ -18,6 +18,9 @@ function setup(t, { bots = 3, settings = {} } = {}) {
   }
   const started = room.startGame(host.id);
   assert.ok(!started.error, started.error);
+  // 身份卡会影响数值（银行家利息翻倍等），测试里清空，只测各自关注的点
+  room.state.players.forEach(p => { p.identity = null; });
+
   return { room, hostId: host.id, S: room.state };
 }
 

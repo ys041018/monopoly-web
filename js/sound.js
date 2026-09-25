@@ -29,6 +29,27 @@ function tone(freq, dur, type, vol, delay = 0) {
   osc.stop(t + dur + 0.02);
 }
 
+// 白噪声（爆炸/翻牌的气声）
+function noise(dur, vol, delay = 0, hp = 400) {
+  const c = ensure();
+  if (!c) return;
+  const t0 = c.currentTime + delay;
+  const len = Math.max(1, Math.floor(c.sampleRate * dur));
+  const buf = c.createBuffer(1, len, c.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const filter = c.createBiquadFilter();
+  filter.type = 'highpass';
+  filter.frequency.value = hp;
+  const g = c.createGain();
+  g.gain.setValueAtTime(vol, t0);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  src.connect(filter); filter.connect(g); g.connect(c.destination);
+  src.start(t0);
+}
+
 export function setSoundEnabled(v) { enabled = v; }
 export function isSoundEnabled() { return enabled; }
 
@@ -82,6 +103,40 @@ export function play(type) {
     case 'error':
       tone(180, 0.18, 'square', 0.14);
       break;
+    // ---- 演出音效 ----
+    case 'tick':                       // 倒计时滴答
+      tone(1200, 0.04, 'square', 0.09);
+      break;
+    case 'tick-urgent':                // 最后 3 秒更急促
+      tone(1500, 0.05, 'square', 0.13);
+      tone(1100, 0.05, 'square', 0.1, 0.06);
+      break;
+    case 'flip':                       // 抽卡翻牌
+      noise(0.18, 0.07, 0, 1200);
+      tone(880, 0.06, 'sine', 0.1, 0.02);
+      break;
+    case 'coin':                       // 金币飞入
+      tone(1400, 0.05, 'sine', 0.11);
+      tone(1900, 0.07, 'sine', 0.09, 0.05);
+      break;
+    case 'hammer':                     // 拍卖落槌
+      tone(160, 0.16, 'sine', 0.22);
+      noise(0.1, 0.12, 0, 900);
+      break;
+    case 'monopoly':                   // 集齐色组
+      tone(600, 0.09, 'sine', 0.13);
+      tone(760, 0.09, 'sine', 0.13, 0.09);
+      tone(950, 0.14, 'sine', 0.15, 0.18);
+      break;
+    case 'bankrupt':                   // 破产爆炸
+      noise(0.5, 0.22, 0, 120);
+      tone(220, 0.4, 'sawtooth', 0.18, 0.02);
+      tone(140, 0.5, 'sawtooth', 0.16, 0.16);
+      break;
+    case 'victory':                    // 胜利小旋律
+      [523, 659, 784, 1046].forEach((f, i) => tone(f, 0.22, 'sine', 0.16, i * 0.16));
+      tone(1318, 0.5, 'sine', 0.18, 0.68);
+      break;
   }
 }
 
@@ -93,6 +148,9 @@ export function playForLog(log) {
   else if (log.includes('租金')) play('rent');
   else if (log.includes('盖房')) play('build');
   else if (log.includes('监狱')) play('jail');
-  else if (log.includes('获胜') || log.includes('破产')) play('win');
+  else if (log.includes('破产') || log.includes('掉线退出')) play('bankrupt');
+  else if (log.includes('获胜') || log.includes('游戏结束')) play('victory');
+  else if (log.includes('公共基金')) play('coin');
+  else if (log.includes('垄断') || log.includes('集齐')) play('monopoly');
   else if (log.includes('出价')) play('bid');
 }

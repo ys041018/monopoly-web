@@ -129,6 +129,8 @@ test('身份：股神做空额度翻倍', (t) => {
 
 test('公共基金池：税费进池、踩到免费停车全拿走；关闭后不进池', (t) => {
   const { room, S } = setup(t, 2);
+  S.players.forEach(p => { p.identity = null; });
+
   const taxTile = room.map.tiles.find(x => x.type === 'tax');
   const parkTile = room.map.tiles.find(x => x.type === 'freeparking');
   const p = S.players[0];

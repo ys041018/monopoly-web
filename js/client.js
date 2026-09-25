@@ -654,6 +654,7 @@ function refresh() {
   renderTradeOffer();
   refreshDrawer();
   syncAuctionModal();
+  juiceOnState();
   detectSound();
   detectCard();
 }
@@ -1271,6 +1272,137 @@ function sumChecked(box) {
   return sum;
 }
 
+// ---------- 演出效果（爽感） ----------
+let juicePrev = { bankrupt: new Set(), myMoney: null, phase: null, auction: null, groups: new Set() };
+let juiceReady = false;                 // 第一帧只做基线，避免重连时炸一堆特效
+
+function juiceBurst(emoji) {
+  const el = document.createElement('div');
+  el.className = 'juice-burst';
+  el.textContent = emoji;
+  document.body.appendChild(el);
+  document.body.classList.add('juice-shake');
+  setTimeout(() => el.remove(), 1200);
+  setTimeout(() => document.body.classList.remove('juice-shake'), 620);
+}
+
+function juiceCoins(amount) {
+  const layer = document.getElementById('bubble-layer') || document.body;
+  const n = Math.min(9, Math.max(3, Math.round(amount / 200)));
+  for (let i = 0; i < n; i++) {
+    const el = document.createElement('div');
+    el.className = 'juice-coin';
+    el.textContent = '🪙';
+    el.style.left = (34 + Math.random() * 32) + '%';
+    el.style.animationDelay = (i * 55) + 'ms';
+    layer.appendChild(el);
+    setTimeout(() => el.remove(), 1500);
+  }
+}
+
+function juiceBoardFlash() {
+  const board = document.getElementById('board');
+  if (!board) return;
+  const el = document.createElement('div');
+  el.className = 'juice-flash';
+  board.appendChild(el);
+  setTimeout(() => el.remove(), 950);
+}
+
+function juiceBanner(title, sub) {
+  const el = document.createElement('div');
+  el.className = 'juice-banner';
+  const a = document.createElement('div'); a.className = 'jb-title'; a.textContent = title;
+  const b = document.createElement('div'); b.className = 'jb-sub'; b.textContent = sub || '';
+  el.appendChild(a); el.appendChild(b);
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2800);
+}
+
+function completeGroups(pid) {
+  const out = new Set();
+  const groups = new Set(activeTiles.filter(t => t.type === 'property').map(t => t.group));
+  groups.forEach((g) => {
+    const tiles = activeTiles.filter(t => t.type === 'property' && t.group === g);
+    if (tiles.length > 1 && tiles.every(t => state.tileOwners[t.id] === pid)) out.add(pid + ':' + g);
+  });
+  return out;
+}
+
+function juiceOnState() {
+  if (!state) {
+    juicePrev = { bankrupt: new Set(), myMoney: null, phase: null, auction: null, groups: new Set() };
+    juiceReady = false;
+    document.body.classList.remove('timer-urgent');
+    return;
+  }
+  const firstFrame = !juiceReady;
+  juiceReady = true;
+
+  const nowBankrupt = new Set(state.players.filter(p => p.bankrupt).map(p => p.id));
+  if (!firstFrame) {
+    nowBankrupt.forEach((id) => {
+      if (!juicePrev.bankrupt.has(id)) {
+        const p = state.players.find(x => x.id === id);
+        juiceBurst('💥');
+        juiceBanner('💥 破产！', (p ? p.name : '') + ' 出局');
+        play('bankrupt');
+      }
+    });
+  }
+  juicePrev.bankrupt = nowBankrupt;
+
+  const me = state.players.find(p => p.id === myId);
+  if (me) {
+    if (!firstFrame && juicePrev.myMoney != null && me.money > juicePrev.myMoney + 20) {
+      juiceCoins(me.money - juicePrev.myMoney);
+      play('coin');
+    }
+    juicePrev.myMoney = me.money;
+  }
+
+  const groupsNow = new Set();
+  state.players.forEach(p => completeGroups(p.id).forEach(k => groupsNow.add(k)));
+  if (!firstFrame) {
+    groupsNow.forEach((key) => {
+      if (!juicePrev.groups.has(key)) {
+        const parts = key.split(':');
+        const who = state.players.find(p => p.id === parts[0]);
+        juiceBoardFlash();
+        play('monopoly');
+        juiceBanner('🏘️ 垄断达成！', (who ? who.name : '') + ' 集齐「' + parts[1] + '组」');
+      }
+    });
+  }
+  juicePrev.groups = groupsNow;
+
+  if (!firstFrame && juicePrev.auction && !state.auction) { juiceBanner('🔨 成交！', ''); play('hammer'); }
+  juicePrev.auction = state.auction || null;
+
+  if (!firstFrame && state.phase === 'gameOver' && juicePrev.phase !== 'gameOver') {
+    const w = state.players.find(p => p.id === state.winner);
+    juiceBanner('🏆 游戏结束', w ? (w.name + ' 获胜！') : '平局');
+    play('victory');
+  }
+  juicePrev.phase = state.phase;
+}
+
+// 倒计时最后 5 秒：滴答 + 屏幕红晕（仅自己回合）
+function juiceTurnTimer() {
+  const cur = state && state.players && state.players[state.current];
+  const myTurn = !!(cur && cur.id === myId);
+  const deadline = state && state.turnDeadline;
+  if (!myTurn || !deadline) { document.body.classList.remove('timer-urgent'); juicePrev.lastTick = null; return; }
+  const remain = Math.ceil((deadline - Date.now()) / 1000);
+  const urgent = remain <= 5 && remain > 0;
+  document.body.classList.toggle('timer-urgent', urgent);
+  if (urgent && juicePrev.lastTick !== remain) {
+    juicePrev.lastTick = remain;
+    play(remain <= 3 ? 'tick-urgent' : 'tick');
+  }
+  if (!urgent) juicePrev.lastTick = null;
+}
+
 // ---------- 工具 ----------
 function mkRow(name, status) {
   const row = document.createElement('div');
@@ -1466,7 +1598,8 @@ function updateTurnTimer() {
     turnSub.textContent = base;
   }
 }
-setInterval(updateTurnTimer, 500);
+function tickTimer() { updateTurnTimer(); juiceTurnTimer(); }
+setInterval(tickTimer, 500);
 
 function renderDice() {
   diceDisplay.textContent = state && state.dice ? state.dice.map(d => DICE_FACES[d - 1]).join(' ') : '';
@@ -1576,6 +1709,10 @@ function showCard(card) {
   cardPopupTitle.textContent = isChance ? '❓ 机会' : '🍀 命运';
   cardPopupText.textContent = card.text;
   cardPopup.classList.remove('hidden');
+  cardPopupInner.classList.remove('flip-in');
+  void cardPopupInner.offsetWidth;      // 重排一次，保证每次抽卡都重播动画
+  cardPopupInner.classList.add('flip-in');
+  play('flip');
   if (cardTimer) clearTimeout(cardTimer);
   cardTimer = setTimeout(() => cardPopup.classList.add('hidden'), 2500);
 }
