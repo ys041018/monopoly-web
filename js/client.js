@@ -130,6 +130,7 @@ const createRoomBtn = $('create-room-btn');
 const themeSelect = $('theme-select');
 const roomSettings = $('room-settings'), setMoney = $('set-money'), setRounds = $('set-rounds'), setHouse = $('set-house'), setMap = $('set-map');
 const setFast = $('set-fast'), setTeam = $('set-team'), setInterest = $('set-interest');
+const setAuction = $('set-auction'), setRandomLand = $('set-randomland'), setRandomMap = $('set-randommap');
 const soundToggle = $('sound-toggle'), copyRoomBtn = $('copy-room-btn');
 const rollBtn = $('roll-btn'), buyBtn = $('buy-btn'), skipBuyBtn = $('skip-buy-btn'), endTurnBtn = $('end-turn-btn');
 const buildBtn = $('build-btn'), mortgageBtn = $('mortgage-btn'), tradeBtn = $('trade-btn'), stockBtn = $('stock-btn'), loanBtn = $('loan-btn');
@@ -282,7 +283,8 @@ ws.addEventListener('open', () => { if (authToken) ws.send(JSON.stringify({ type
 function toggle(el) { el.classList.toggle('hidden'); }
 hotkeyBtn.addEventListener('click', () => toggle(hotkeyPanel));
 
-[setMoney, setRounds, setHouse, setMap, setFast, setTeam, setInterest].forEach(el => el && el.addEventListener('change', sendSettings));
+[setMoney, setRounds, setHouse, setMap, setFast, setTeam, setInterest, setAuction, setRandomLand, setRandomMap]
+  .forEach(el => el && el.addEventListener('change', sendSettings));
 
 if (authToken) { authMsg.textContent = '正在自动登录...'; }
 
@@ -1038,7 +1040,9 @@ function tip(el, text) {
 
 // ---------- 渲染 ----------
 function renderPlayers() {
-  const modeChips = state ? ((state.fastMode ? ' ⚡' : '') + (state.teamMode ? ' 🤝' : '')) : '';
+  const modeChips = state
+    ? ((state.fastMode ? ' ⚡' : '') + (state.teamMode ? ' 🤝' : '') + (state.randomLand ? ' 🎲' : '') + (state.randomMap ? ' 🗺️' : ''))
+    : '';
   playerCount.textContent = players.length + '/8';
   gamePlayerCount.textContent = players.length + '/8' + modeChips;
   playerList.innerHTML = '';
@@ -1073,6 +1077,9 @@ function renderRoomSettings() {
   if (setFast) setFast.checked = !!roomSettingsData.fastMode;
   if (setTeam) setTeam.checked = !!roomSettingsData.teamMode;
   if (setInterest) setInterest.value = String(roomSettingsData.interestRate != null ? roomSettingsData.interestRate : 0.01);
+  if (setAuction) setAuction.checked = roomSettingsData.auctionOnClose !== false;
+  if (setRandomLand) setRandomLand.checked = !!roomSettingsData.randomLand;
+  if (setRandomMap) setRandomMap.checked = !!roomSettingsData.randomMap;
 }
 
 function sendSettings() {
@@ -1080,6 +1087,9 @@ function sendSettings() {
     startMoney: Number(setMoney.value), maxRounds: Number(setRounds.value), houseMultiplier: Number(setHouse.value), mapId: setMap ? setMap.value : 'standard',
     fastMode: !!(setFast && setFast.checked), teamMode: !!(setTeam && setTeam.checked),
     interestRate: Number(setInterest ? setInterest.value : 0.01),
+    auctionOnClose: !!(setAuction && setAuction.checked),
+    randomLand: !!(setRandomLand && setRandomLand.checked),
+    randomMap: !!(setRandomMap && setRandomMap.checked),
   } }));
 }
 

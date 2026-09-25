@@ -208,6 +208,44 @@ test('融券费与强制平仓：每回合 2% 费用，空头超过现金会被�
   assert.ok(S.log.some(l => l.includes('强制平仓')), '应有强制平仓日志');
 });
 
+test('房规：开局随机分地开关', (t2) => {
+  const off = setup(t2, { settings: { randomLand: false } });
+  assert.equal(Object.keys(off.S.tileOwners).length, 0, '关闭时不分地');
+
+  const on = setup(t2, { settings: { randomLand: true } });
+  const assigned = Object.keys(on.S.tileOwners);
+  assert.ok(assigned.length > 0, '开启时随机分地');
+  const counts = on.S.players.map(p => Object.values(on.S.tileOwners).filter(o => o === p.id).length);
+  assert.ok(counts.every(c => c === counts[0]), '每人地数相同: ' + counts.join(','));
+});
+
+test('房规：随机地图', (t2) => {
+  const { room, S } = setup(t2, { settings: { randomMap: true } });
+  assert.ok(['standard', 'classic', 'mini', 'metro', 'space'].includes(S.mapId), '地图应在可选列表内: ' + S.mapId);
+  assert.equal(room.map.id, S.mapId, '服务端地图与 state 一致');
+  assert.equal(room.map.tiles.length, room.map.size);
+});
+
+test('房规：关闭拍卖时破产地产直接回归银行', (t2) => {
+  // 默认：走拍卖
+  const withAuction = setup(t2, { settings: { auctionOnClose: true } });
+  const A = withAuction.S;
+  A.tileOwners[1] = A.players[0].id;
+  A.players[0].money = -100;
+  withAuction.room.bankrupt(A.players[0], null);
+  assert.equal(A.phase, 'auction', '默认应进入拍卖阶段');
+
+  // 关闭：不拍卖，地产变无主
+  const noAuction = setup(t2, { settings: { auctionOnClose: false } });
+  const B = noAuction.S;
+  B.tileOwners[1] = B.players[0].id;
+  B.players[0].money = -100;
+  noAuction.room.bankrupt(B.players[0], null);
+  assert.notEqual(B.phase, 'auction', '关闭拍卖时不应进入拍卖阶段');
+  assert.equal(B.tileOwners[1], undefined, '地产应回归银行（无主）');
+  assert.ok(B.log.some(l => l.includes('关闭拍卖')), '日志应说明房规');
+});
+
 test('指数基金：跟随个股表现且波动更平滑', (t2) => {
   const { room, S } = setup(t2);
   const index = S.stocks.find(s => s.id === 'index');

@@ -10,7 +10,7 @@ import {
   LOAN_RATE, LOAN_MAX, LOAN_ASSET_RATIO, LOAN_MIN, MARKET_EVENT_CHANCE,
   SHORT_FEE_RATE, SHORT_MAX_VALUE, SHORT_CASH_RATIO, SHORT_MARGIN_RATIO,
 } from './rules.js';
-import { getMap } from '../js/data/maps.js';
+import { getMap, MAP_LIST } from '../js/data/maps.js';
 import { updateStats } from './db.js';
 import { CHANCE_CARDS, CHEST_CARDS } from '../js/data/cards.js';
 
@@ -32,6 +32,9 @@ export class GameRoom {
     this.settings = {
       startMoney: START_MONEY, maxRounds: DEFAULT_MAX_ROUNDS, houseMultiplier: 1, mapId: 'standard',
       fastMode: false, teamMode: false, interestRate: DEFAULT_INTEREST_RATE,
+      auctionOnClose: true,   // 破产时是否走银行拍卖（关闭则地产直接回归银行）
+      randomLand: false,      // 开局随机分地（普通模式也可用）
+      randomMap: false,       // 开局随机地图
     };
     this.map = getMap(this.settings.mapId);
   }
@@ -48,6 +51,9 @@ export class GameRoom {
     if (v.fastMode != null) this.settings.fastMode = !!v.fastMode;
     if (v.teamMode != null) this.settings.teamMode = !!v.teamMode;
     if (v.interestRate != null) this.settings.interestRate = Math.max(0, Math.min(0.05, Number(v.interestRate) || 0));
+    if (v.auctionOnClose != null) this.settings.auctionOnClose = !!v.auctionOnClose;
+    if (v.randomLand != null) this.settings.randomLand = !!v.randomLand;
+    if (v.randomMap != null) this.settings.randomMap = !!v.randomMap;
     this.map = getMap(this.settings.mapId);
     this.broadcastPlayerList();
     return { ok: true };
@@ -131,6 +137,10 @@ export class GameRoom {
     if (this.settings.teamMode && this.players.size % 2 !== 0) return { error: '团队模式需要偶数人数（2v2 / 3v3）' };
 
     this.started = true;
+    if (this.settings.randomMap) {
+      const others = MAP_LIST.filter(id => id !== this.settings.mapId);
+      this.settings.mapId = others[Math.floor(Math.random() * others.length)] || this.settings.mapId;
+    }
     this.map = getMap(this.settings.mapId);
     // 快速模式：套用预设（高起点资金、租金加成、回合更少、倒计时更短）
     const fast = !!this.settings.fastMode;
@@ -173,14 +183,17 @@ export class GameRoom {
       rentMultiplier: fast ? FAST_MODE.rentMultiplier : 1,
       interestRate: this.settings.interestRate || 0,
       loanRate: LOAN_RATE,
+      auctionOnClose: this.settings.auctionOnClose !== false,
+      randomLand: !!this.settings.randomLand,
+      randomMap: !!this.settings.randomMap,
       shortFeeRate: SHORT_FEE_RATE,
       turnTimeout: fast ? FAST_MODE.turnTimeout : TURN_TIMEOUT,
       stocks: STOCK_DEFS.map(d => ({ id: d.id, name: d.name, base: d.base, price: d.base, prev: d.base, kind: d.kind || 'stock' })),
       log: ['游戏开始！'],
     };
 
-    // 快速模式：开局随机分地
-    if (fast) this._distributeProperties();
+    // 快速模式或"随机分地"房规：开局分地
+    if (fast || this.settings.randomLand) this._distributeProperties();
 
     // 开局就启动第一回合倒计时（此前首回合没有 deadline，界面不显示秒数）
     this._resetTurnTimer();
@@ -218,7 +231,7 @@ export class GameRoom {
 
     players.forEach((p) => {
       const names = picked.get(p.id);
-      if (names && names.length) this.addLog('【快速模式】' + p.name + ' 开局分到 ' + names.join('、'));
+      if (names && names.length) this.addLog('【开局分地】' + p.name + ' 分到 ' + names.join('、'));
     });
     return perPlayer;
   }
@@ -1124,13 +1137,15 @@ export class GameRoom {
         this.state.tileHouses[tid] = 0;
         this.state.tileMortgaged[tid] = false;
       });
-      this.addLog(player.name + ' 宣告破产，地产由银行拍卖');
+      this.addLog(this.state.auctionOnClose === false
+        ? player.name + ' 宣告破产，地产被银行收回（房规：关闭拍卖）'
+        : player.name + ' 宣告破产，地产由银行拍卖');
     }
 
     this.checkWinner();
     if (this.state.phase === 'gameOver') return;
 
-    if (!creditor && ownedTiles.length > 0) {
+    if (!creditor && ownedTiles.length > 0 && this.state.auctionOnClose !== false) {
       this.state.auctionQueue = ownedTiles;
       this._startNextAuction();
     }
