@@ -37,6 +37,7 @@ import { getMap } from './data/maps.js';
 let activeTiles = getMap('standard').tiles;
 import { playForLog, play, setSoundEnabled, isSoundEnabled } from './sound.js';
 import { QUICK_PHRASES, QUICK_EMOJIS } from './data/chat.js';
+import { getIdentity, identityMods } from './data/identities.js';
 
 const WS_URL = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}`;
 
@@ -167,7 +168,8 @@ const leaderboardBtn = $('leaderboard-btn');
 const themeSelect = $('theme-select');
 const roomSettings = $('room-settings'), setMoney = $('set-money'), setRounds = $('set-rounds'), setHouse = $('set-house'), setMap = $('set-map');
 const setFast = $('set-fast'), setTeam = $('set-team'), setInterest = $('set-interest');
-const setAuction = $('set-auction'), setRandomLand = $('set-randomland'), setRandomMap = $('set-randommap');
+const setAuction = $('set-auction'), setRandomLand = $('set-randomland'), setRandomMap = $('set-randommap'), setFund = $('set-fund');
+const fundLine = $('fund-line');
 const soundToggle = $('sound-toggle'), copyRoomBtn = $('copy-room-btn');
 const rollBtn = $('roll-btn'), buyBtn = $('buy-btn'), skipBuyBtn = $('skip-buy-btn'), endTurnBtn = $('end-turn-btn');
 const buildBtn = $('build-btn'), mortgageBtn = $('mortgage-btn'), tradeBtn = $('trade-btn'), stockBtn = $('stock-btn'), loanBtn = $('loan-btn');
@@ -460,7 +462,7 @@ ws.addEventListener('open', () => { if (authToken) ws.send(JSON.stringify({ type
 function toggle(el) { el.classList.toggle('hidden'); }
 hotkeyBtn.addEventListener('click', () => toggle(hotkeyPanel));
 
-[setMoney, setRounds, setHouse, setMap, setFast, setTeam, setInterest, setAuction, setRandomLand, setRandomMap]
+[setMoney, setRounds, setHouse, setMap, setFast, setTeam, setInterest, setAuction, setRandomLand, setRandomMap, setFund]
   .forEach(el => el && el.addEventListener('change', sendSettings));
 
 if (authToken) { authMsg.textContent = '正在自动登录...'; }
@@ -719,7 +721,9 @@ function updateActions() {
     tradeBtn.classList.remove('hidden');
   } else if (state.phase === 'buying') {
     const t = activeTiles[state.pendingTile];
-    buyBtn.textContent = '买下这块地（¥' + (t ? tilePrice(t) : 0) + '）';
+    const meForPrice = state.players.find(p => p.id === myId);
+  const buyPrice = t ? Math.round(tilePrice(t) * identityMods(meForPrice || {}).propertyDiscount) : 0;
+  buyBtn.textContent = '买下这块地（¥' + buyPrice + '）';
     buyBtn.classList.remove('hidden');
     skipBuyBtn.classList.remove('hidden');
   }
@@ -767,7 +771,10 @@ function getBuildableTiles() {
     const minH = Math.min(...tiles.map(t => state.tileHouses[t.id] || 0));
     tiles.forEach(t => {
       const h = state.tileHouses[t.id] || 0;
-      if (h <= minH && h < 5 && !state.tileMortgaged[t.id]) result.push({ tile: t, houses: h, cost: GROUPS[group].houseCost });
+      if (h <= minH && h < 5 && !state.tileMortgaged[t.id]) {
+      const mods = identityMods(state.players.find(p => p.id === myId) || {});
+      result.push({ tile: t, houses: h, cost: Math.round(GROUPS[group].houseCost * (state.houseMultiplier || 1) * mods.houseDiscount) });
+    }
     });
   });
   return result;
@@ -1297,6 +1304,13 @@ function tip(el, text) {
 
 // ---------- 渲染 ----------
 function renderPlayers() {
+  // 公共基金池
+  if (fundLine) {
+    const showFund = !!(state && state.fundPool !== false);
+    fundLine.classList.toggle('hidden', !showFund);
+    if (showFund) fundLine.textContent = '🏦 公共基金 ¥' + (state.fund || 0) + (state.fund > 0 ? '（踩到免费停车全拿）' : '');
+  }
+
   const modeChips = state
     ? ((state.fastMode ? ' ⚡' : '') + (state.teamMode ? ' 🤝' : '') + (state.randomLand ? ' 🎲' : '') + (state.randomMap ? ' 🗺️' : ''))
     : '';
@@ -1340,7 +1354,10 @@ function renderPlayers() {
     // 编号与棋盘徽章一致（棋盘上用这个数字标归属）
     const idx = state && sp ? state.players.indexOf(sp) + 1 : null;
     const numHtml = idx ? '<span class="p-index" style="background:' + p.color + '">' + idx + '</span>' : '';
-    li2.innerHTML = `${numHtml}<span class="dot" style="background:${p.color}"></span><span class="p-name">${escapeHtml(p.name)}</span>${sp && sp.team ? '<span class="tag">' + sp.team + ' 队</span>' : ''}${sp && sp.bankrupt ? '<span class="tag">破产</span>' : ''}${isCur ? '<span class="tag turn">回合中</span>' : ''}<span class="p-money">¥${sp ? sp.money : 1500}</span>`;
+    const idn = sp && getIdentity(sp.identity);
+    // 侧栏窄，列表里只显示图标（悬停看效果），完整描述显示在回合卡里
+    const idnHtml = idn ? '<span class="tag identity" title="' + idn.name + '：' + idn.desc + '">' + idn.icon + '</span>' : '';
+    li2.innerHTML = `${numHtml}<span class="dot" style="background:${p.color}"></span><span class="p-name">${escapeHtml(p.name)}</span>${idnHtml}${sp && sp.team ? '<span class="tag">' + sp.team + ' 队</span>' : ''}${sp && sp.bankrupt ? '<span class="tag">破产</span>' : ''}${isCur ? '<span class="tag turn">回合中</span>' : ''}<span class="p-money">¥${sp ? sp.money : 1500}</span>`;
     gamePlayerList.appendChild(li2);
   });
 }
@@ -1397,6 +1414,7 @@ function renderRoomSettings() {
   if (setAuction) setAuction.checked = roomSettingsData.auctionOnClose !== false;
   if (setRandomLand) setRandomLand.checked = !!roomSettingsData.randomLand;
   if (setRandomMap) setRandomMap.checked = !!roomSettingsData.randomMap;
+  if (setFund) setFund.checked = roomSettingsData.fundPool !== false;
 }
 
 function sendSettings() {
@@ -1407,6 +1425,7 @@ function sendSettings() {
     auctionOnClose: !!(setAuction && setAuction.checked),
     randomLand: !!(setRandomLand && setRandomLand.checked),
     randomMap: !!(setRandomMap && setRandomMap.checked),
+    fundPool: !!(setFund && setFund.checked),
   } }));
 }
 
@@ -1439,7 +1458,10 @@ function updateTurnTimer() {
   if (state.turnDeadline) {
     const remain = Math.max(0, Math.ceil((state.turnDeadline - Date.now()) / 1000));
     const isMe = state.players[state.current] && state.players[state.current].id === myId;
-    turnSub.textContent = base + (isMe ? ' · ⏳ 倒计时 ' + remain + ' 秒' : ' · ⏳ 对方剩余 ' + remain + ' 秒');
+    const meP = state.players.find(p => p.id === myId);
+  const meIdn = meP ? getIdentity(meP.identity) : null;
+  const idnText = meIdn ? ' · ' + meIdn.icon + meIdn.name + '（' + meIdn.desc + '）' : '';
+  turnSub.textContent = base + idnText + (isMe ? ' · ⏳ 倒计时 ' + remain + ' 秒' : ' · ⏳ 对方剩余 ' + remain + ' 秒');
   } else {
     turnSub.textContent = base;
   }

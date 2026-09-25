@@ -314,6 +314,19 @@ function drawSpecial(id, tile, r, vertical, corner, state) {
     drawText(tile.name, r.x + r.w * 0.58, r.y + r.h / 2, 13, tileTextColor(), 'center', 'bold');
   }
 
+  // 免费停车：显示公共基金金额
+  if (tile.type === 'freeparking' && state && state.fundPool !== false && state.fund > 0) {
+    const text = '¥' + state.fund;
+    ctx.font = '900 15px "Baloo 2", "Microsoft YaHei", system-ui, sans-serif';
+    const bw = ctx.measureText(text).width + 18;
+    const by = y + h - 26;
+    ctx.fillStyle = '#ffe9a8';
+    roundRect(r.x + r.w / 2 - bw / 2, by, bw, 22, 11);
+    ctx.fill();
+    strokeRound(r.x + r.w / 2 - bw / 2, by, bw, 22, 11, inkColor(), 2.5);
+    drawText(text, r.x + r.w / 2, by + 11, 14, inkColor(), 'center', 'bold');
+  }
+
   // 车站/公共事业归属：玩家色描边 + 徽章
   const ownerId = state ? state.tileOwners[id] : null;
   if (ownerId && (tile.type === 'railroad' || tile.type === 'utility')) {
@@ -398,6 +411,21 @@ function drawCenter(state) {
     ctx.fillStyle = inkSoftColor(0.6);
     ctx.font = '800 16px "Baloo 2", "Microsoft YaHei", system-ui, sans-serif';
     ctx.fillText('点击「掷骰子」开始', cx, y + 130);
+  }
+
+  // 公共基金池
+  if (state && state.fundPool !== false) {
+    const label = '🏦 公共基金 ¥' + (state.fund || 0);
+    ctx.font = '800 17px "Baloo 2", "Microsoft YaHei", system-ui, sans-serif';
+    const wLabel = ctx.measureText(label).width + 28;
+    const fy = y + 178;
+    ctx.fillStyle = '#fffdf8';
+    roundRect(cx - wLabel / 2, fy - 15, wLabel, 30, 15);
+    ctx.fill();
+    strokeRound(cx - wLabel / 2, fy - 15, wLabel, 30, 15, inkColor(), 3);
+    ctx.fillStyle = inkColor();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(label, cx, fy + 0.5);
   }
 
   // 当前玩家

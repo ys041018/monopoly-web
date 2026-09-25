@@ -13,6 +13,7 @@ import {
 import { getMap, MAP_LIST } from '../js/data/maps.js';
 import { updateStats } from './db.js';
 import { CHANCE_CARDS, CHEST_CARDS } from '../js/data/cards.js';
+import { dealIdentities, getIdentity, identityMods } from '../js/data/identities.js';
 
 const PLAYER_COLORS = ['#EF5350', '#FF9800', '#FDD835', '#66BB6A', '#4FC3F7', '#AB47BC', '#26C6DA', '#EC407A'];
 const TURN_TIMEOUT = 45000; // 回合倒计时（毫秒）
@@ -33,6 +34,7 @@ export class GameRoom {
       startMoney: START_MONEY, maxRounds: DEFAULT_MAX_ROUNDS, houseMultiplier: 1, mapId: 'standard',
       fastMode: false, teamMode: false, interestRate: DEFAULT_INTEREST_RATE,
       auctionOnClose: true,   // 破产时是否走银行拍卖（关闭则地产直接回归银行）
+      fundPool: true,         // 税费进公共基金池，踩到免费停车全拿走
       randomLand: false,      // 开局随机分地（普通模式也可用）
       randomMap: false,       // 开局随机地图
     };
@@ -54,6 +56,7 @@ export class GameRoom {
     if (v.teamMode != null) this.settings.teamMode = !!v.teamMode;
     if (v.interestRate != null) this.settings.interestRate = Math.max(0, Math.min(0.05, Number(v.interestRate) || 0));
     if (v.auctionOnClose != null) this.settings.auctionOnClose = !!v.auctionOnClose;
+    if (v.fundPool != null) this.settings.fundPool = !!v.fundPool;
     if (v.randomLand != null) this.settings.randomLand = !!v.randomLand;
     if (v.randomMap != null) this.settings.randomMap = !!v.randomMap;
     this.map = getMap(this.settings.mapId);
@@ -220,6 +223,8 @@ export class GameRoom {
       interestRate: this.settings.interestRate || 0,
       loanRate: LOAN_RATE,
       auctionOnClose: this.settings.auctionOnClose !== false,
+      fundPool: this.settings.fundPool !== false,
+      fund: 0,                       // 公共基金池金额
       randomLand: !!this.settings.randomLand,
       randomMap: !!this.settings.randomMap,
       shortFeeRate: SHORT_FEE_RATE,
@@ -227,6 +232,14 @@ export class GameRoom {
       stocks: STOCK_DEFS.map(d => ({ id: d.id, name: d.name, base: d.base, price: d.base, prev: d.base, kind: d.kind || 'stock' })),
       log: ['游戏开始！'],
     };
+
+    // 身份卡：开局随机分配（人多时允许重复）
+    const ids = dealIdentities(players.length);
+    players.forEach((p, i) => { p.identity = ids[i]; });
+    players.forEach((p) => {
+      const idn = getIdentity(p.identity);
+      if (idn) this.addLog('【身份】' + p.name + ' 抽到「' + idn.icon + ' ' + idn.name + '」（' + idn.desc + '）');
+    });
 
     // 快速模式或"随机分地"房规：开局分地
     if (fast || this.settings.randomLand) this._distributeProperties();
@@ -307,6 +320,16 @@ export class GameRoom {
       return { ok: true };
     }
 
+    // 赌徒：掷出双数额外得奖
+    if (d1 === d2) {
+      const bonus = identityMods(cur).doublesBonus;
+      if (bonus > 0) {
+        cur.money += bonus;
+        this.addLog(cur.name + '（赌徒）掷出双数，额外 +¥' + bonus);
+        this.commentate('🎲 ' + cur.name + ' 掷出双数，赌徒额外 +¥' + bonus + '！');
+      }
+    }
+
     this._moveAndResolve(cur, ps, d1, d2, cur.name + ' 掷出 ' + d1 + '+' + d2);
     return { ok: true };
   }
@@ -360,12 +383,12 @@ export class GameRoom {
     if (to >= this.map.size) {
       to = to % this.map.size;
       passedGo = true;
-      cur.money += PASS_GO_BONUS;
+      cur.money += PASS_GO_BONUS + identityMods(cur).passGoExtra;
     }
     cur.position = to;
 
     const tile = this.map.tiles[to];
-    if (passedGo) logMsg += '，经过起点 +¥' + PASS_GO_BONUS;
+    if (passedGo) logMsg += '，经过起点 +¥' + (PASS_GO_BONUS + identityMods(cur).passGoExtra);
     logMsg += '，走到「' + tile.name + '」';
 
     let phase = 'after_move';
@@ -383,10 +406,18 @@ export class GameRoom {
         if (this.state.teamMode && owner && owner.team && owner.team === cur.team) {
           logMsg += '（队友的地产，免租）';
         } else {
-          const rent = Math.round(this.calcRent(to, ownerId, steps) * (this.state.rentMultiplier || 1));
+          const baseRent = Math.round(this.calcRent(to, ownerId, steps) * (this.state.rentMultiplier || 1));
+          const rent = Math.round(baseRent * identityMods(owner || {}).rentMult);
           cur.money -= rent;
           if (owner) owner.money += rent;
           logMsg += '，支付租金 ¥' + rent + ' 给 ' + (owner ? owner.name : '?');
+          if (rent >= 500) this.commentate('💰 巨额租金！' + (owner ? owner.name : '地主') + ' 一把收走 ¥' + rent);
+          const streak = this.state._rentStreak;
+          if (streak && streak.id === ownerId) streak.count += 1;
+          else this.state._rentStreak = { id: ownerId, count: 1 };
+          if (this.state._rentStreak.count === 3) {
+            this.commentate('🔥 ' + (owner ? owner.name : '地主') + ' 连续 3 次收租，气势如虹！');
+          }
           if (cur.money < 0) creditor = ownerId;
         }
       } else {
@@ -394,7 +425,8 @@ export class GameRoom {
       }
     } else if (tile.type === 'tax') {
       cur.money -= tile.amount;
-      logMsg += '，缴税 ¥' + tile.amount;
+      const toFund = this.addFund(tile.amount);
+      logMsg += '，缴税 ¥' + tile.amount + (toFund ? '（¥' + toFund + ' 进入公共基金）' : '');
     } else if (tile.type === 'gotojail') {
       cur.position = this.map.jailId;
       cur.inJail = true;
@@ -410,6 +442,9 @@ export class GameRoom {
       const r = this.applyEvent(cur, ps, tile);
       logMsg += '，' + r.text;
       if (r.again) phase = 'rolling';
+    } else if (tile.type === 'freeparking') {
+      const got = this.takeFund(cur);
+      if (got) logMsg += '，拿走公共基金 ¥' + got + '！';
     }
 
     this.state.dice = [d1, d2];
@@ -438,13 +473,21 @@ export class GameRoom {
 
     const tileId = this.state.pendingTile;
     const tile = this.map.tiles[tileId];
-    const price = getPropertyPrice(tile);
+    const mods = identityMods(cur);
+    const price = Math.round(getPropertyPrice(tile) * mods.propertyDiscount);
     if (cur.money < price) return { error: '现金不足，无法购买' };
 
     cur.money -= price;
     this.state.tileOwners[tileId] = cur.id;
     this.state.tileHouses[tileId] = 0;
     this.addLog(cur.name + ' 购买了「' + tile.name + '」¥' + price);
+    // 集齐同色整组 → 播报
+    if (tile.type === 'property' && tile.group) {
+      const groupTiles = this.map.tiles.filter(t => t.type === 'property' && t.group === tile.group);
+      if (groupTiles.length > 1 && groupTiles.every(t => this.state.tileOwners[t.id] === cur.id)) {
+        this.commentate('🏘️ ' + cur.name + ' 集齐了「' + (GROUPS[tile.group] ? GROUPS[tile.group].name : tile.group) + '组」，垄断租金翻倍！');
+      }
+    }
     this.finishTurn();
     this.broadcastState();
     return { ok: true };
@@ -552,7 +595,7 @@ export class GameRoom {
     if (curHouses > minHouses) return { error: '需要均匀盖房（先给房子少的地盖）' };
     if (curHouses >= HOTEL_LEVEL) return { error: '已建成旅馆，不能再盖' };
 
-    const cost = Math.round(getHouseCost(tile.group) * (this.state.houseMultiplier || 1));
+    const cost = Math.round(getHouseCost(tile.group) * (this.state.houseMultiplier || 1) * identityMods(cur).houseDiscount);
     if (cur.money < cost) return { error: '现金不足，无法盖房' };
 
     cur.money -= cost;
@@ -569,6 +612,7 @@ export class GameRoom {
         break;
       case 'lose':
         cur.money -= card.amount;
+        this.addFund(card.amount);
         break;
       case 'goto': {
         const target = card.gotoType ? (this.map.tiles.find(t => t.type === card.gotoType) || {}).id : card.position;
@@ -604,8 +648,9 @@ export class GameRoom {
     switch (tile.sub) {
       case 'lottery': {
         const win = Math.random() < 0.5;
-        cur.money += win ? 100 : -100;
-        text = win ? '中奖 +¥100' : '没中，-¥100';
+        if (win) cur.money += 100;
+        else { cur.money -= 100; this.addFund(100); }
+        text = win ? '中奖 +¥100' : '没中，-¥100' + (this.state.fundPool === false ? '' : '（进入公共基金）');
         break;
       }
       case 'teleport': {
@@ -622,10 +667,12 @@ export class GameRoom {
         cur.money += 100;
         text = '获得奖金 +¥100';
         break;
-      case 'fine':
+      case 'fine': {
         cur.money -= 80;
-        text = '缴纳罚款 -¥80';
+        const toFund = this.addFund(80);
+        text = '缴纳罚款 -¥80' + (toFund ? '（进入公共基金）' : '');
         break;
+      }
       case 'advance':
         cur.position = (cur.position + 3) % this.map.size;
         text = '前进 3 步';
@@ -783,7 +830,7 @@ export class GameRoom {
 
     const value = stock.price * n;
     const cashAfter = cur.money + value;
-    const limit = Math.min(SHORT_MAX_VALUE, Math.floor(cashAfter * SHORT_CASH_RATIO));
+    const limit = Math.min(Math.round(SHORT_MAX_VALUE * identityMods(cur).shortCapMult), Math.floor(cashAfter * SHORT_CASH_RATIO));
     if (this.shortValue(cur) + value > limit) {
       return { error: '做空额度不足（上限 ¥' + limit + '，当前空头 ¥' + this.shortValue(cur) + '）' };
     }
@@ -843,7 +890,7 @@ export class GameRoom {
     const ending = this.state.players[this.state.current];
     const rate = this.state.interestRate || 0;
     if (ending && !ending.bankrupt && rate > 0 && ending.money > 0) {
-      const interest = Math.floor(ending.money * rate);
+      const interest = Math.floor(ending.money * rate * identityMods(ending).interestMult);
       if (interest > 0) {
         ending.money += interest;
         this.addLog(ending.name + ' 存款利息 +¥' + interest);
@@ -866,7 +913,7 @@ export class GameRoom {
 
     // 贷款利息滚入本金
     if (ending && !ending.bankrupt && (ending.loan || 0) > 0) {
-      const loanInterest = Math.max(1, Math.round(ending.loan * (this.state.loanRate || 0)));
+      const loanInterest = Math.max(1, Math.round(ending.loan * (this.state.loanRate || 0) * identityMods(ending).loanInterestMult));
       ending.loan += loanInterest;
       this.addLog(ending.name + ' 贷款利息 +¥' + loanInterest + '（余额 ¥' + ending.loan + '）');
     }
@@ -964,7 +1011,7 @@ export class GameRoom {
       }
     } else if (this.state.phase === 'buying') {
       const t = this.map.tiles[this.state.pendingTile];
-      const price = getPropertyPrice(t);
+      const price = Math.round(getPropertyPrice(t) * identityMods(cur).propertyDiscount);
       if (cur.money >= price) this.buyProperty(playerId);
       else this.skipBuy(playerId);
     } else if (this.state.phase === 'after_move') {
@@ -1157,6 +1204,7 @@ export class GameRoom {
 
   bankrupt(player, creditorId) {
     player.bankrupt = true;
+    this.commentate('💥 ' + player.name + ' 破产出局！');
     const ownedTiles = Object.keys(this.state.tileOwners)
       .filter(tid => this.state.tileOwners[tid] === player.id)
       .map(Number);
@@ -1209,6 +1257,34 @@ export class GameRoom {
     }
     v += this.stockValue(p);
     return v;
+  }
+
+  // ---------- 公共基金池 ----------
+  addFund(amount) {
+    const n = Math.max(0, Math.floor(Number(amount) || 0));
+    if (!n || !this.state || this.state.fundPool === false) return 0;
+    this.state.fund = (this.state.fund || 0) + n;
+    return n;
+  }
+
+  takeFund(player) {
+    const amount = (this.state && this.state.fund) || 0;
+    if (!player || amount <= 0) return 0;
+    this.state.fund = 0;
+    player.money += amount;
+    this.addLog(player.name + ' 踩到免费停车，拿走公共基金 ¥' + amount + '！');
+    this.commentate('🎰 ' + player.name + ' 拿走公共基金 ¥' + amount + '！');
+    return amount;
+  }
+
+  // ---------- 解说播报（复用时气泡通道，节流防刷屏） ----------
+  commentate(text) {
+    if (!text) return;
+    const now = Date.now();
+    if (this._lastCommentary && now - this._lastCommentary.at < 2500) return;      // 至少间隔 2.5 秒
+    if (this._lastCommentary && this._lastCommentary.text === text && now - this._lastCommentary.at < 15000) return;
+    this._lastCommentary = { at: now, text };
+    this.broadcast(JSON.stringify({ type: 'chat', kind: 'text', text, name: '解说', color: '#a274ff' }));
   }
 
   // 空头市值（做空是负债，按现价计）
@@ -1367,7 +1443,8 @@ export class GameRoom {
     if (this.state && this.state.players) {
       this.state.players.forEach((p) => {
         p.loanCap = this.loanCap(p);
-        p.shortCap = Math.min(SHORT_MAX_VALUE, Math.max(0, Math.floor(p.money * SHORT_CASH_RATIO - this.shortValue(p))));
+        p.shortCap = Math.min(Math.round(SHORT_MAX_VALUE * identityMods(p).shortCapMult),
+          Math.max(0, Math.floor(p.money * SHORT_CASH_RATIO - this.shortValue(p))));
       });
     }
     this.broadcast(JSON.stringify({ type: 'game_state', state: this.state }));

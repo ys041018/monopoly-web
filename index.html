@@ -104,6 +104,7 @@
           <div id="turn-title" class="turn-title">等待开始</div>
           <div id="turn-sub" class="turn-sub"></div>
           <div id="dice-display" class="dice-display"></div>
+          <div id="fund-line" class="fund-line hidden"></div>
         </div>
 
         <!-- 主操作：永远在最前，不因功能面板展开而位移 -->
@@ -217,6 +218,7 @@
         <label><input type="checkbox" id="set-auction"> 🔨 破产走银行拍卖（关闭则地产被银行收回）</label>
         <label><input type="checkbox" id="set-randomland"> 🎲 开局随机分地（普通模式也可用）</label>
         <label><input type="checkbox" id="set-randommap"> 🗺️ 开局随机地图</label>
+        <label><input type="checkbox" id="set-fund"> 🏦 公共基金池（税费进池，踩到免费停车全拿走）</label>
         <label>存款利息
           <select id="set-interest">
             <option value="0">关闭</option>
