@@ -112,8 +112,9 @@ async function getStatsRow(userId) {
 // 乐观锁：先读（含 updated_at），再用 updated_at 作条件写；被并发改过则重试
 // 排行榜（默认前 20）：按胜场、最高资产排序
 export async function getLeaderboard(limit = 20) {
+  // games>0：只统计真正打过完整对局的账号（AI 玩家没有 userId，本来就不会进榜）
   const r = await sb('/rest/v1/stats?select=user_id,wins,losses,games,max_assets,users(username,nickname)'
-    + '&order=wins.desc,max_assets.desc&limit=' + Math.max(1, Math.min(50, Number(limit) || 20)));
+    + '&games=gt.0&order=wins.desc,max_assets.desc&limit=' + Math.max(1, Math.min(50, Number(limit) || 20)));
   if (!r.ok || !Array.isArray(r.data)) return [];
   return r.data.map((row, i) => ({
     rank: i + 1,
@@ -141,7 +142,7 @@ export async function getRank(wins) {
 
 // 参与排行的总人数
 export async function getPlayerCount() {
-  const r = await sb('/rest/v1/stats?select=user_id', { headers: { Prefer: 'count=exact', Range: '0-0' } });
+  const r = await sb('/rest/v1/stats?select=user_id&games=gt.0', { headers: { Prefer: 'count=exact', Range: '0-0' } });
   return countFromRange(r.headers);
 }
 

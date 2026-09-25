@@ -252,7 +252,8 @@ function rankRow(entry, myNickname) {
   row.className = 'rank-row' + (myNickname && entry.nickname === myNickname ? ' me' : '');
   const no = document.createElement('span'); no.className = 'no'; no.textContent = '#' + entry.rank;
   const nick = document.createElement('span'); nick.className = 'nick'; nick.textContent = entry.nickname;
-  const val = document.createElement('span'); val.className = 'val'; val.textContent = entry.wins + ' 胜 · 最高 ¥' + entry.maxAssets;
+  const val = document.createElement('span'); val.className = 'val';
+  val.textContent = entry.wins + ' 胜 · ' + (entry.games || 0) + ' 场 · 最高 ¥' + entry.maxAssets;
   row.appendChild(no); row.appendChild(nick); row.appendChild(val);
   return row;
 }
@@ -326,6 +327,10 @@ function renderLeaderboardOnly(msg) {
   title.className = 'p-title';
   title.textContent = msg.unavailable ? '账号服务未配置' : '排行榜 Top 20';
   profileBody.appendChild(title);
+  const note = document.createElement('div');
+  note.className = 'trade-bal';
+  note.textContent = '仅统计完成过对局的登录账号 · 人机/AI 不参与排行';
+  profileBody.appendChild(note);
   renderLeaderboardInto(profileBody, msg.rows || [], null);
 }
 
