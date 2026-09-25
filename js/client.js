@@ -405,6 +405,9 @@ ws.onmessage = (e) => {
       break;
     case 'player_list':
       players = msg.players;
+      // 房主可能已经转让给别人：每次名单更新都同步自己的房主状态
+      const meInList = players.find(p => p.id === myId);
+      if (meInList) myIsHost = !!meInList.isHost;
       if (msg.settings) roomSettingsData = msg.settings;
       renderPlayers();
       renderRoomSettings();
@@ -417,6 +420,18 @@ ws.onmessage = (e) => {
       else syncGame();
       break;
     case 'chat': showBubble(msg); break;
+    case 'kicked':
+      // 被移出房间：清掉房间与身份记录，避免自动重连又加回去
+      sessionStorage.removeItem('monopoly_room');
+      sessionStorage.removeItem('monopoly_player_id');
+      sessionStorage.removeItem('monopoly_player_name');
+      state = null; entered = false; myId = null; myIsHost = false; players = [];
+      if (roomInput) roomInput.value = '';
+      game.classList.add('hidden');
+      lobby.classList.remove('hidden');
+      renderPlayers();
+      setMsg(msg.message || '你被房主移出了房间', true);
+      break;
     case 'room_list': renderRooms(msg.rooms); break;
 
     case 'back_to_lobby': backToLobby(); break;
@@ -1084,6 +1099,23 @@ function renderPlayers() {
   players.forEach((p) => {
     const li = document.createElement('li');
     li.innerHTML = `<span class="dot" style="background:${p.color}"></span><span class="p-name">${escapeHtml(p.name)}</span>${p.isHost ? '<span class="tag">房主</span>' : ''}${p.isAI ? '<span class="tag">机器人</span>' : ''}${p.id === myId ? '<span class="tag me">我</span>' : ''}`;
+    // 房主操作：转让房主 / 踢出房间（仅大厅、仅对其他人）
+    if (myIsHost && p.id !== myId) {
+      const pass = document.createElement('button');
+      pass.type = 'button';
+      pass.className = 'mini-btn';
+      pass.title = '转让房主';
+      pass.textContent = '👑';
+      pass.addEventListener('click', () => ws.send(JSON.stringify({ type: 'transfer_host', playerId: p.id })));
+      const kick = document.createElement('button');
+      kick.type = 'button';
+      kick.className = 'mini-btn danger';
+      kick.title = p.isAI ? '移除机器人' : '踢出房间';
+      kick.textContent = '✕';
+      kick.addEventListener('click', () => ws.send(JSON.stringify({ type: 'kick_player', playerId: p.id })));
+      li.appendChild(pass);
+      li.appendChild(kick);
+    }
     playerList.appendChild(li);
     const sp = state ? state.players.find(s => s.id === p.id) : null;
     const isCur = p.id === curId;

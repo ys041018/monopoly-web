@@ -390,6 +390,56 @@ test('资产统计含地产、房屋与股票市值', (t) => {
   assert.equal(room._calcAssets(p), expected);
 });
 
+test('房主权限：踢人（含机器人）、不能踢自己、开局后禁止', (t2) => {
+  const room = new GameRoom();
+  const sent = [];
+  let closed = false;
+  const hostWs = { readyState: 1, send() {}, close() {} };
+  const guestWs = { readyState: 1, send(m) { sent.push(JSON.parse(m)); }, close() { closed = true; } };
+  const host = room.addPlayer(hostWs, '房主', null, null);
+  const guest = room.addPlayer(guestWs, '客人', null, null);
+  assert.equal(host.player.isHost, true, '第一位应是房主');
+  assert.equal(guest.player.isHost, false, '后加入的不能是房主');
+
+  assert.ok(room.kickPlayer(guest.id, host.id).error, '非房主踢人应被拒');
+  assert.ok(room.transferHost(guest.id, guest.id).error, '非房主转让应被拒');
+  assert.ok(room.kickPlayer(host.id, host.id).error, '房主不能踢自己');
+
+  const r = room.kickPlayer(host.id, guest.id);
+  assert.ok(!r.error, r.error);
+  assert.equal(room.players.has(guest.id), false, '被踢玩家应移出房间');
+  assert.ok(sent.some(m => m.type === 'kicked'), '被踢者应收到 kicked 消息');
+  assert.equal(closed, true, '被踢者的连接应被关闭');
+
+  room.addAI(host.id);
+  const bot = [...room.players.values()].find(p => p.isAI);
+  assert.ok(!room.kickPlayer(host.id, bot.id).error, '应能移除机器人');
+  assert.equal([...room.players.values()].filter(p => p.isAI).length, 0);
+
+  const h2 = room.addPlayer({ readyState: 1, send() {}, close() {} }, '甲', null, null);
+  const g2 = room.addPlayer({ readyState: 1, send() {}, close() {} }, '乙', null, null);
+  room.startGame(h2.id);
+  assert.ok(room.kickPlayer(h2.id, g2.id).error, '开局后不能踢人');
+  assert.ok(room.transferHost(h2.id, g2.id).error, '开局后不能转让房主');
+});
+
+test('房主权限：转让房主与权限交接', (t2) => {
+  const room = new GameRoom();
+  const host = room.addPlayer({ readyState: 1, send() {}, close() {} }, '房主', null, null);
+  const guest = room.addPlayer({ readyState: 1, send() {}, close() {} }, '客人', null, null);
+  room.addAI(host.id);
+  const bot = [...room.players.values()].find(p => p.isAI);
+
+  assert.ok(room.transferHost(host.id, bot.id).error, '不能转让给机器人');
+  assert.ok(room.transferHost(host.id, host.id).error, '不能转让给自己');
+
+  assert.ok(!room.transferHost(host.id, guest.id).error, '应能转让给真人');
+  assert.equal(room.players.get(guest.id).isHost, true, '新房主生效');
+  assert.equal(room.players.get(host.id).isHost, false, '原房主降为普通玩家');
+  assert.ok(!room.updateSettings(guest.id, { startMoney: 3000 }).error, '新房主可改设置');
+  assert.ok(room.updateSettings(host.id, { startMoney: 1500 }).error, '原房主不能改设置');
+});
+
 test('大厅最后一个真人离开时，机器人与房间一起清空', (t) => {
   const room = new GameRoom();
   const host = room.addPlayer(fakeWs(), '房主', null, null);

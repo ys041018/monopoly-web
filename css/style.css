@@ -420,6 +420,18 @@ select,.theme-select{cursor:pointer;}
   box-shadow: 0 1px 0 rgba(47, 50, 101, .45);
 }
 
+/* 房主操作小按钮（大厅玩家列表） */
+.mini-btn {
+  width: 25px; height: 25px; flex: none; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 2px solid var(--ink); border-radius: 50%; background: #fff;
+  font-size: 12px; line-height: 1; cursor: pointer; font-family: inherit;
+  box-shadow: 0 2px 0 var(--ink); touch-action: manipulation;
+}
+.mini-btn.danger { background: #ffe3e3; color: #b71c1c; }
+.mini-btn:hover { transform: translateY(-1px); }
+.mini-btn:active { transform: translateY(1px); box-shadow: 0 1px 0 var(--ink); }
+
 /* ---------- 侧栏信息层级：状态 → 主操作 → 入口 → 抽屉 → 玩家 → 工具 ---------- */
 .action-card { padding: 12px; }
 .entry-row {

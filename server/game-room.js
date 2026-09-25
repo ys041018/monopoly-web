@@ -129,6 +129,40 @@ export class GameRoom {
 
   removeSpectator(id) { this.spectators.delete(id); }
 
+  // 房主踢人（仅大厅，可踢机器人）
+  kickPlayer(hostId, targetId) {
+    const host = this.players.get(hostId);
+    if (!host || !host.isHost) return { error: '只有房主可以踢人' };
+    if (this.started) return { error: '游戏已开始，不能踢人' };
+    if (targetId === hostId) return { error: '不能踢自己，可以直接退出房间' };
+    const target = this.players.get(targetId);
+    if (!target) return { error: '该玩家已不在房间' };
+
+    this.players.delete(targetId);
+    if (target.ws) {
+      try { target.ws.send(JSON.stringify({ type: 'kicked', message: '你被房主移出了房间' })); } catch {}
+      try { target.ws.close(); } catch {}
+    }
+    this.broadcastPlayerList();
+    return { ok: true, name: target.name, isAI: !!target.isAI };
+  }
+
+  // 转让房主（仅大厅，且只能转给真人）
+  transferHost(hostId, targetId) {
+    const host = this.players.get(hostId);
+    if (!host || !host.isHost) return { error: '只有房主可以转让房主' };
+    if (this.started) return { error: '游戏已开始，不能转让房主' };
+    if (targetId === hostId) return { error: '你已经是房主了' };
+    const target = this.players.get(targetId);
+    if (!target) return { error: '该玩家已不在房间' };
+    if (target.isAI) return { error: '不能把房主转让给机器人' };
+
+    host.isHost = false;
+    target.isHost = true;
+    this.broadcastPlayerList();
+    return { ok: true, name: target.name };
+  }
+
   startGame(playerId) {
     const host = this.players.get(playerId);
     if (!host || !host.isHost) return { error: '只有房主可以开始游戏' };

@@ -413,6 +413,18 @@ wss.on('connection', (ws, req) => {
     if (isSpectator) return;
 
     switch (msg.type) {
+      case 'kick_player': {
+        const r = room.kickPlayer(playerId, String(msg.playerId || ''));
+        if (r.error) room.sendError(ws, r.error);
+        else console.log('[踢人] ' + playerId + ' 踢出 ' + r.name);
+        break;
+      }
+      case 'transfer_host': {
+        const r = room.transferHost(playerId, String(msg.playerId || ''));
+        if (r.error) room.sendError(ws, r.error);
+        else console.log('[转让房主] ' + playerId + ' -> ' + r.name);
+        break;
+      }
       case 'update_settings': {
         const r = room.updateSettings(playerId, msg.settings);
         if (r.error) room.sendError(ws, r.error);
