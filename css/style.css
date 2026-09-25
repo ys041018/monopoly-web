@@ -393,6 +393,35 @@ select,.theme-select{cursor:pointer;}
 }
 
 
+/* ---------- 房间设置 / 个人主页弹窗 ---------- */
+.settings-modal-card { max-width: 420px; }
+.settings-body { display: flex; flex-direction: column; gap: 8px; }
+.settings-body label { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.settings-body label select { flex: 1; min-width: 0; }
+.settings-body input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--candy-green); flex: none; }
+.auth-actions { display: flex; gap: 6px; }
+.auth-actions .btn { padding: 5px 10px; font-size: 12.5px; box-shadow: 0 3px 0 var(--ink); }
+.profile-modal-card { max-width: 430px; }
+.profile-body { display: flex; flex-direction: column; gap: 10px; }
+.profile-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.profile-name { font-size: 18px; font-weight: 900; }
+.profile-rank { font-size: 13px; font-weight: 800; color: var(--ink-2); }
+.profile-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.profile-cell {
+  background: var(--paper-2); border: 2.5px solid var(--ink); border-radius: 14px; padding: 8px 10px;
+}
+.profile-cell .k { font-size: 11.5px; color: var(--ink-2); font-weight: 800; }
+.profile-cell .v { font-size: 17px; font-weight: 900; }
+.rank-list { display: flex; flex-direction: column; gap: 5px; max-height: 42vh; overflow-y: auto; }
+.rank-row {
+  display: flex; align-items: center; gap: 8px;
+  background: #fff; border: 2px solid var(--ink); border-radius: 12px; padding: 5px 9px; font-size: 13px;
+}
+.rank-row.me { background: var(--candy-yellow); }
+.rank-row .no { width: 22px; font-weight: 900; color: var(--ink-2); }
+.rank-row .nick { flex: 1; font-weight: 800; }
+.rank-row .val { font-weight: 900; font-variant-numeric: tabular-nums; }
+
 /* ---------- 公开房间列表 ---------- */
 .rooms-modal-card { max-width: 420px; }
 .rooms-list { display: flex; flex-direction: column; gap: 8px; max-height: 52vh; overflow-y: auto; margin: 6px 0 8px; }

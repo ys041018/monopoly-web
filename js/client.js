@@ -129,6 +129,9 @@ const authLoginBtn = $('auth-login-btn'), authRegisterBtn = $('auth-register-btn
 const createRoomBtn = $('create-room-btn');
 const quickMatchBtn = $('quick-match-btn'), roomsBtn = $('rooms-btn');
 const roomsModal = $('rooms-modal'), roomsList = $('rooms-list'), roomsClose = $('rooms-close');
+const settingsBtn = $('settings-btn'), settingsClose = $('settings-close');
+const profileBtn = $('profile-btn'), profileModal = $('profile-modal'), profileClose = $('profile-close'), profileBody = $('profile-body'), profileTitle = $('profile-title');
+const leaderboardBtn = $('leaderboard-btn');
 const themeSelect = $('theme-select');
 const roomSettings = $('room-settings'), setMoney = $('set-money'), setRounds = $('set-rounds'), setHouse = $('set-house'), setMap = $('set-map');
 const setFast = $('set-fast'), setTeam = $('set-team'), setInterest = $('set-interest');
@@ -218,6 +221,112 @@ let roomsTimer = null;
 function closeRoomsModal() {
   if (roomsModal) roomsModal.classList.add('hidden');
   if (roomsTimer) { clearInterval(roomsTimer); roomsTimer = null; }
+}
+
+// ---------- 房间设置（房主，弹窗） ----------
+if (settingsBtn) settingsBtn.addEventListener('click', () => {
+  roomSettings.classList.remove('hidden');
+  renderRoomSettings();
+});
+if (settingsClose) settingsClose.addEventListener('click', () => roomSettings.classList.add('hidden'));
+if (roomSettings) roomSettings.addEventListener('click', (e) => { if (e.target === roomSettings) roomSettings.classList.add('hidden'); });
+
+// ---------- 个人主页 / 排行榜 ----------
+if (profileBtn) profileBtn.addEventListener('click', () => {
+  if (profileTitle) profileTitle.textContent = '📊 个人主页';
+  profileModal.classList.remove('hidden');
+  profileBody.textContent = '加载中…';
+  ws.send(JSON.stringify({ type: 'get_profile', token: authToken || undefined }));
+});
+if (leaderboardBtn) leaderboardBtn.addEventListener('click', () => {
+  if (profileTitle) profileTitle.textContent = '🏆 排行榜';
+  profileModal.classList.remove('hidden');
+  profileBody.textContent = '加载中…';
+  ws.send(JSON.stringify({ type: 'get_leaderboard', limit: 20 }));
+});
+if (profileClose) profileClose.addEventListener('click', () => profileModal.classList.add('hidden'));
+if (profileModal) profileModal.addEventListener('click', (e) => { if (e.target === profileModal) profileModal.classList.add('hidden'); });
+
+function rankRow(entry, myNickname) {
+  const row = document.createElement('div');
+  row.className = 'rank-row' + (myNickname && entry.nickname === myNickname ? ' me' : '');
+  const no = document.createElement('span'); no.className = 'no'; no.textContent = '#' + entry.rank;
+  const nick = document.createElement('span'); nick.className = 'nick'; nick.textContent = entry.nickname;
+  const val = document.createElement('span'); val.className = 'val'; val.textContent = entry.wins + ' 胜 · 最高 ¥' + entry.maxAssets;
+  row.appendChild(no); row.appendChild(nick); row.appendChild(val);
+  return row;
+}
+
+function renderLeaderboardInto(container, rows, myNickname) {
+  const list = document.createElement('div');
+  list.className = 'rank-list';
+  if (!rows || rows.length === 0) {
+    const tipEl = document.createElement('div');
+    tipEl.className = 'waiting-tip';
+    tipEl.textContent = '还没有战绩数据，先玩一局吧';
+    list.appendChild(tipEl);
+  } else {
+    rows.forEach(r => list.appendChild(rankRow(r, myNickname)));
+  }
+  container.appendChild(list);
+}
+
+function renderProfile(msg) {
+  if (!profileBody) return;
+  profileBody.innerHTML = '';
+  if (msg.needLogin) {
+    const d = document.createElement('div'); d.className = 'waiting-tip'; d.textContent = '请先登录后查看个人主页';
+    profileBody.appendChild(d);
+    return;
+  }
+  if (msg.unavailable) {
+    const d = document.createElement('div'); d.className = 'waiting-tip'; d.textContent = '账号服务未配置，暂时无法查看战绩';
+    profileBody.appendChild(d);
+    return;
+  }
+  const st = msg.stats || {};
+  const games = st.games || 0, wins = st.wins || 0;
+  const rate = games > 0 ? Math.round(wins / games * 100) : 0;
+
+  const head = document.createElement('div');
+  head.className = 'profile-head';
+  const name = document.createElement('span');
+  name.className = 'profile-name';
+  name.textContent = (msg.user && (msg.user.nickname || msg.user.username)) || '未登录';
+  const rank = document.createElement('span');
+  rank.className = 'profile-rank';
+  rank.textContent = msg.rank ? ('排名 #' + msg.rank + (msg.total ? ' / ' + msg.total : '')) : '';
+  head.appendChild(name); head.appendChild(rank);
+  profileBody.appendChild(head);
+
+  const grid = document.createElement('div');
+  grid.className = 'profile-grid';
+  [['总场次', games], ['胜 / 负', wins + ' / ' + (st.losses || 0)], ['胜率', rate + '%'], ['最高资产', '¥' + (st.max_assets || 0)]]
+    .forEach(([k, v]) => {
+      const cell = document.createElement('div');
+      cell.className = 'profile-cell';
+      const kk = document.createElement('div'); kk.className = 'k'; kk.textContent = k;
+      const vv = document.createElement('div'); vv.className = 'v'; vv.textContent = String(v);
+      cell.appendChild(kk); cell.appendChild(vv);
+      grid.appendChild(cell);
+    });
+  profileBody.appendChild(grid);
+
+  const title = document.createElement('div');
+  title.className = 'p-title';
+  title.textContent = '排行榜 Top 10';
+  profileBody.appendChild(title);
+  renderLeaderboardInto(profileBody, msg.leaderboard, msg.user && msg.user.nickname);
+}
+
+function renderLeaderboardOnly(msg) {
+  if (!profileBody) return;
+  profileBody.innerHTML = '';
+  const title = document.createElement('div');
+  title.className = 'p-title';
+  title.textContent = msg.unavailable ? '账号服务未配置' : '排行榜 Top 20';
+  profileBody.appendChild(title);
+  renderLeaderboardInto(profileBody, msg.rows || [], null);
 }
 
 soundToggle.addEventListener('click', () => { const on = !isSoundEnabled(); setSoundEnabled(on); soundToggle.textContent = on ? '🔊' : '🔇'; localStorage.setItem('monopoly_sound', on ? '1' : '0'); });
@@ -420,6 +529,8 @@ ws.onmessage = (e) => {
       else syncGame();
       break;
     case 'chat': showBubble(msg); break;
+    case 'profile': renderProfile(msg); break;
+    case 'leaderboard': renderLeaderboardOnly(msg); break;
     case 'kicked':
       // 被移出房间：清掉房间与身份记录，避免自动重连又加回去
       sessionStorage.removeItem('monopoly_room');
@@ -1166,9 +1277,10 @@ function renderRooms(rooms) {
 }
 
 function renderRoomSettings() {
-  if (!roomSettings) return;
   const show = myIsHost && !state;
-  roomSettings.classList.toggle('hidden', !show);
+  if (settingsBtn) settingsBtn.classList.toggle('hidden', !show);   // 设置改为弹窗，这里控制入口按钮
+  if (!show && roomSettings) roomSettings.classList.add('hidden');
+  if (!roomSettings) return;
   if (!roomSettingsData) return;
   setMoney.value = String(roomSettingsData.startMoney);
   setRounds.value = String(roomSettingsData.maxRounds);

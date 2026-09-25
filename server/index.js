@@ -12,7 +12,7 @@ import { GameRoom } from './game-room.js';
 import { getMap } from '../js/data/maps.js';
 import { MAX_PLAYERS } from './rules.js';
 import { QUICK_PHRASES, QUICK_EMOJIS, CHAT_COOLDOWN_MS } from '../js/data/chat.js';
-import { dbReady, findUserByUsername, createUser, createSession, findSession, deleteSession, verifyPassword, getStats, pruneSessions } from './db.js';
+import { dbReady, findUserByUsername, createUser, createSession, findSession, deleteSession, verifyPassword, getStats, pruneSessions, getLeaderboard, getRank, getPlayerCount } from './db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
@@ -281,6 +281,43 @@ wss.on('connection', (ws, req) => {
 
     if (msg.type === 'register' || msg.type === 'login' || msg.type === 'auth' || msg.type === 'logout') {
       handleAuth(msg);
+      return;
+    }
+
+    // 个人主页：资料 + 战绩 + 排名 + 排行榜
+    if (msg.type === 'get_profile') {
+      if (!dbReady()) { sendJSON({ type: 'profile', unavailable: true }); return; }
+      try {
+        const u = msg.token ? await findSession(String(msg.token)) : null;
+        if (!u) { sendJSON({ type: 'profile', needLogin: true }); return; }
+        const stats = (await getStats(u.id)) || { wins: 0, losses: 0, games: 0, max_assets: 0 };
+        const rank = await getRank(stats.wins || 0);
+        const total = await getPlayerCount();
+        const leaderboard = await getLeaderboard(10);
+        sendJSON({
+          type: 'profile',
+          user: { id: u.id, username: u.username, nickname: u.nickname },
+          stats,
+          rank,
+          total,
+          leaderboard,
+        });
+      } catch (e) {
+        console.error('[profile]', e.message);
+        sendJSON({ type: 'profile', unavailable: true });
+      }
+      return;
+    }
+
+    // 公开排行榜（无需登录）
+    if (msg.type === 'get_leaderboard') {
+      if (!dbReady()) { sendJSON({ type: 'leaderboard', rows: [], unavailable: true }); return; }
+      try {
+        sendJSON({ type: 'leaderboard', rows: await getLeaderboard(Number(msg.limit) || 20) });
+      } catch (e) {
+        console.error('[leaderboard]', e.message);
+        sendJSON({ type: 'leaderboard', rows: [], unavailable: true });
+      }
       return;
     }
 

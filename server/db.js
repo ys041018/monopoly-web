@@ -26,7 +26,7 @@ async function sb(path, options = {}) {
   const text = await res.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-  return { ok: res.ok, status: res.status, data };
+  return { ok: res.ok, status: res.status, data, headers: res.headers };
 }
 
 // 异步哈希：scryptSync 会阻塞事件循环（并发登录时整服卡住），这里改成异步
@@ -110,6 +110,41 @@ async function getStatsRow(userId) {
 }
 
 // 乐观锁：先读（含 updated_at），再用 updated_at 作条件写；被并发改过则重试
+// 排行榜（默认前 20）：按胜场、最高资产排序
+export async function getLeaderboard(limit = 20) {
+  const r = await sb('/rest/v1/stats?select=user_id,wins,losses,games,max_assets,users(username,nickname)'
+    + '&order=wins.desc,max_assets.desc&limit=' + Math.max(1, Math.min(50, Number(limit) || 20)));
+  if (!r.ok || !Array.isArray(r.data)) return [];
+  return r.data.map((row, i) => ({
+    rank: i + 1,
+    userId: row.user_id,
+    nickname: (row.users && (row.users.nickname || row.users.username)) || '玩家',
+    wins: row.wins || 0,
+    losses: row.losses || 0,
+    games: row.games || 0,
+    maxAssets: row.max_assets || 0,
+  }));
+}
+
+function countFromRange(headers) {
+  const range = headers && headers.get ? headers.get('content-range') : '';
+  const total = Number(String(range || '').split('/')[1]);
+  return Number.isFinite(total) ? total : null;
+}
+
+// 排名 = 胜场比自己多的人数 + 1
+export async function getRank(wins) {
+  const r = await sb('/rest/v1/stats?select=user_id&wins=gt.' + Number(wins || 0), { headers: { Prefer: 'count=exact', Range: '0-0' } });
+  const higher = countFromRange(r.headers);
+  return higher == null ? null : higher + 1;
+}
+
+// 参与排行的总人数
+export async function getPlayerCount() {
+  const r = await sb('/rest/v1/stats?select=user_id', { headers: { Prefer: 'count=exact', Range: '0-0' } });
+  return countFromRange(r.headers);
+}
+
 export async function updateStats(userId, { win, assets }) {
   if (!userId) return false;
   for (let attempt = 0; attempt < 3; attempt++) {

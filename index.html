@@ -38,7 +38,10 @@
 
       <div id="auth-info" class="auth-info hidden">
         <span>已登录：<b id="auth-name"></b><i id="auth-stats" class="auth-stats"></i></span>
-        <button id="auth-logout-btn" class="btn ghost">退出</button>
+        <span class="auth-actions">
+          <button id="profile-btn" class="btn ghost" type="button">📊 个人主页</button>
+          <button id="auth-logout-btn" class="btn ghost">退出</button>
+        </span>
       </div>
 
       <div class="join-row">
@@ -55,6 +58,7 @@
       <div class="join-row">
         <button id="quick-match-btn" class="btn" type="button">⚡ 快速匹配</button>
         <button id="rooms-btn" class="btn ghost" type="button">🌐 公开房间</button>
+        <button id="leaderboard-btn" class="btn ghost" type="button">🏆 排行榜</button>
       </div>
       <div class="join-row theme-row">
         <span class="theme-label">棋盘主题</span>
@@ -75,40 +79,8 @@
         <ul id="player-list" class="player-list"></ul>
       </div>
 
-      <details id="room-settings" class="room-settings hidden">
-        <summary>⚙️ 房间设置（房主可调）</summary>
-        <label>初始资金
-          <select id="set-money"><option value="1000">¥1000</option><option value="1500">¥1500</option><option value="2000">¥2000</option><option value="3000">¥3000</option><option value="5000">¥5000</option></select>
-        </label>
-        <label>回合上限
-          <select id="set-rounds"><option value="30">30</option><option value="60">60</option><option value="100">100</option></select>
-        </label>
-        <label>地图
-          <select id="set-map">
-            <option value="standard">标准 52 格</option>
-            <option value="classic">经典 40 格</option>
-            <option value="mini">迷你 32 格</option>
-            <option value="metro">都市 44 格</option>
-            <option value="space">星际 48 格</option>
-          </select>
-        </label>
-        <label>房价倍率
-          <select id="set-house"><option value="0.5">0.5x</option><option value="1">1x</option><option value="1.5">1.5x</option><option value="2">2x</option></select>
-        </label>
-        <label><input type="checkbox" id="set-fast"> ⚡ 快速模式（3000 起始 · 开局随机分地 · 租金 ×1.5 · 60 回合 · 45 秒）</label>
-        <label><input type="checkbox" id="set-team"> 🤝 团队 2v2（需偶数人数，队友免租）</label>
-        <label><input type="checkbox" id="set-auction"> 🔨 破产走银行拍卖（关闭则地产被银行收回）</label>
-        <label><input type="checkbox" id="set-randomland"> 🎲 开局随机分地（普通模式也可用）</label>
-        <label><input type="checkbox" id="set-randommap"> 🗺️ 开局随机地图</label>
-        <label>存款利息
-          <select id="set-interest">
-            <option value="0">关闭</option>
-            <option value="0.01">1%（默认）</option>
-            <option value="0.02">2%</option>
-            <option value="0.05">5%</option>
-          </select>
-        </label>
-      </details>
+      <button id="settings-btn" class="btn ghost hidden" type="button">⚙️ 房间设置</button>
+
       <button id="add-ai-btn" class="btn ghost hidden">🤖 添加机器人</button>
       <button id="start-btn" class="btn start" disabled>开始游戏</button>
       <p id="lobby-msg" class="msg"></p>
@@ -191,6 +163,56 @@
   </div>
 
   <div id="card-popup" class="card-popup hidden"><div id="card-popup-inner" class="card-popup-inner"><div id="card-popup-title" class="card-popup-title"></div><div id="card-popup-text" class="card-popup-text"></div></div></div>
+  <div id="profile-modal" class="modal hidden">
+    <div class="modal-card profile-modal-card">
+      <div class="drawer-head">
+        <span id="profile-title" class="drawer-title">📊 个人主页</span>
+        <button id="profile-close" class="btn ghost drawer-close" type="button">关闭</button>
+      </div>
+      <div id="profile-body" class="profile-body"></div>
+    </div>
+  </div>
+  <div id="room-settings" class="modal hidden">
+    <div class="modal-card settings-modal-card">
+      <div class="drawer-head">
+        <span class="drawer-title">⚙️ 房间设置</span>
+        <button id="settings-close" class="btn ghost drawer-close" type="button">关闭</button>
+      </div>
+      <div class="settings-body">
+        <label>初始资金
+          <select id="set-money"><option value="1000">¥1000</option><option value="1500">¥1500</option><option value="2000">¥2000</option><option value="3000">¥3000</option><option value="5000">¥5000</option></select>
+        </label>
+        <label>回合上限
+          <select id="set-rounds"><option value="30">30</option><option value="60">60</option><option value="100">100</option></select>
+        </label>
+        <label>地图
+          <select id="set-map">
+            <option value="standard">标准 52 格</option>
+            <option value="classic">经典 40 格</option>
+            <option value="mini">迷你 32 格</option>
+            <option value="metro">都市 44 格</option>
+            <option value="space">星际 48 格</option>
+          </select>
+        </label>
+        <label>房价倍率
+          <select id="set-house"><option value="0.5">0.5x</option><option value="1">1x</option><option value="1.5">1.5x</option><option value="2">2x</option></select>
+        </label>
+        <label><input type="checkbox" id="set-fast"> ⚡ 快速模式（3000 起始 · 开局随机分地 · 租金 ×1.5 · 60 回合 · 45 秒）</label>
+        <label><input type="checkbox" id="set-team"> 🤝 团队 2v2（需偶数人数，队友免租）</label>
+        <label><input type="checkbox" id="set-auction"> 🔨 破产走银行拍卖（关闭则地产被银行收回）</label>
+        <label><input type="checkbox" id="set-randomland"> 🎲 开局随机分地（普通模式也可用）</label>
+        <label><input type="checkbox" id="set-randommap"> 🗺️ 开局随机地图</label>
+        <label>存款利息
+          <select id="set-interest">
+            <option value="0">关闭</option>
+            <option value="0.01">1%（默认）</option>
+            <option value="0.02">2%</option>
+            <option value="0.05">5%</option>
+          </select>
+        </label>
+      </div>
+    </div>
+  </div>
   <div id="rooms-modal" class="modal hidden">
     <div class="modal-card rooms-modal-card">
       <div class="drawer-head">

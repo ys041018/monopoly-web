@@ -248,6 +248,7 @@ test('房规：关闭拍卖时破产地产直接回归银行', (t2) => {
 
 test('指数基金：跟随个股表现且波动更平滑', (t2) => {
   const { room, S } = setup(t2);
+  room.eventChance = 0;                  // 关掉随机市场事件，测试只验证跟随逻辑
   const index = S.stocks.find(s => s.id === 'index');
   assert.ok(index, '应存在指数基金');
   assert.equal(index.kind, 'index');

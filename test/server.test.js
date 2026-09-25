@@ -354,6 +354,17 @@ test('健壮性：没人加入的房间会被回收', async () => {
   c.close();
 });
 
+test('个人主页/排行榜：未配置账号服务时优雅降级', async () => {
+  const c = await connect();
+  c.send({ type: 'get_profile', token: 'dummy' });
+  const profile = await c.wait('profile');
+  assert.ok(profile.unavailable || profile.needLogin, '应返回降级提示，实际 ' + JSON.stringify(profile).slice(0, 80));
+  c.send({ type: 'get_leaderboard' });
+  const lb = await c.wait('leaderboard');
+  assert.ok(Array.isArray(lb.rows), '排行榜应返回数组');
+  c.close();
+});
+
 test('WebSocket：房间不存在时返回友好错误', async () => {
   const c = await connect();
   c.send({ type: 'join', name: '路人', roomCode: 'ZZZZZZ' });

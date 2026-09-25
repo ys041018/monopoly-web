@@ -38,6 +38,7 @@ export class GameRoom {
     };
     this.map = getMap(this.settings.mapId);
     this.lastActiveAt = Date.now();   // 房间 GC 用
+    this.eventChance = EVENT_CHANCE;   // 市场事件概率（测试可置 0）
   }
 
   updateSettings(playerId, settings) {
@@ -701,7 +702,7 @@ export class GameRoom {
     }
 
     // 3) 小概率全市场事件
-    if (Math.random() < EVENT_CHANCE) {
+    if (Math.random() < this.eventChance) {
       this._applyMarketEvent(Math.random() < 0.5 ? 'crash' : 'boom');
     }
   }
