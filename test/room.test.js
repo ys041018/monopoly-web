@@ -178,6 +178,57 @@ test('胜负：仅剩一人时结束；团队模式按队伍判定', (t) => {
   assert.equal(T.phase, 'gameOver');
 });
 
+test('银行贷款：额度、借款、利息滚动、还款与净资产', (t2) => {
+  const { room, S } = setup(t2);
+  const p = S.players[0];
+  const pid = p.id;
+  S.current = 0; S.phase = 'rolling';
+
+  // 额度 = 总资产 × 30%，上限 2500，按百元取整
+  const net = room._calcAssets(p);
+  const cap = room.loanCap(p);
+  assert.equal(cap, Math.max(0, Math.min(Math.floor((net * 0.3) / 100) * 100, 2500)), '额度按净资产计算');
+  assert.ok(cap > 0);
+
+  // 借款到账 + 余额
+  const cash0 = p.money;
+  assert.ok(!room.takeLoan(pid, 500).error);
+  assert.equal(p.loan, 500);
+  assert.equal(p.money, cash0 + 500, '借款到账');
+  assert.equal(room.loanCap(p), cap, '借款后额度不应变大（按净资产计算）');
+
+  // 低于起借额 / 超过额度被拒
+  assert.ok(room.takeLoan(pid, 50).error, '低于 ¥100 应被拒');
+  assert.ok(room.takeLoan(pid, cap + 1000).error, '超过额度应被拒');
+
+  // 净资产 = 毛资产 − 贷款
+  assert.equal(room._calcAssets(p), room._grossAssets(p) - 500, '贷款从净资产扣除');
+
+  // 每回合利息滚入本金
+  p.loan = 1000;
+  const before = p.loan;
+  room.finishTurn();
+  assert.ok(p.loan > before, '贷款利息应滚入本金: ' + before + ' -> ' + p.loan);
+  const expected = before + Math.max(1, Math.round(before * S.loanRate));
+  assert.equal(p.loan, expected, '利息按 3% 计算');
+
+  // 还款
+  S.current = 0; S.phase = 'rolling';
+  const owed = p.loan;
+  p.money = 5000;
+  assert.ok(!room.repayLoan(pid, 300).error);
+  assert.equal(p.loan, owed - 300, '还款减少余额');
+  assert.equal(p.money, 4700, '还款扣现金');
+  assert.ok(!room.repayLoan(pid, 99999).error, '超额还款按余额结清');
+  assert.equal(p.loan, 0, '结清');
+  assert.ok(room.repayLoan(pid, 100).error, '已结清不能再还');
+
+  // 非自己回合被拒
+  S.current = 1;
+  assert.ok(room.takeLoan(pid, 500).error, '非自己回合不能贷款');
+  S.current = 0;
+});
+
 test('资产统计含地产、房屋与股票市值', (t) => {
   const { room, S } = setup(t);
   const p = S.players[0];

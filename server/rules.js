@@ -31,6 +31,12 @@ export const FAST_MODE = {
 // 银行利息：每回合结束时按现金结算
 export const DEFAULT_INTEREST_RATE = 0.01;
 
+// 银行贷款：额度 = 总资产 × 比例（上限固定），每回合按余额计息、利息滚入本金
+export const LOAN_RATE = 0.03;
+export const LOAN_MAX = 2500;
+export const LOAN_ASSET_RATIO = 0.3;
+export const LOAN_MIN = 100;
+
 // 股票定义（价格由服务端每回合波动）
 export const STOCK_DEFS = [
   { id: 'bank',  name: '银行股', base: 120 },

@@ -7,6 +7,7 @@ import {
   JAIL_BAIL,
   calcPropertyRent, calcRailroadRent, calcUtilityRent, getPropertyPrice, getHouseCost, HOTEL_LEVEL, DEFAULT_MAX_ROUNDS,
   FAST_MODE, STOCK_DEFS, DEFAULT_INTEREST_RATE,
+  LOAN_RATE, LOAN_MAX, LOAN_ASSET_RATIO, LOAN_MIN,
 } from './rules.js';
 import { getMap } from '../js/data/maps.js';
 import { updateStats } from './db.js';
@@ -140,6 +141,7 @@ export class GameRoom {
       team: this.settings.teamMode ? (teamIdx++ % 2 === 0 ? 'A' : 'B') : null,
       stocks: {},
       stockCost: {},   // 各股持仓总成本（移动加权平均法算盈亏）
+      loan: 0,         // 银行贷款余额（计入总资产时为负数）
     }));
 
     this.state = {
@@ -165,6 +167,7 @@ export class GameRoom {
       teamMode: !!this.settings.teamMode,
       rentMultiplier: fast ? FAST_MODE.rentMultiplier : 1,
       interestRate: this.settings.interestRate || 0,
+      loanRate: LOAN_RATE,
       turnTimeout: fast ? FAST_MODE.turnTimeout : TURN_TIMEOUT,
       stocks: STOCK_DEFS.map(d => ({ id: d.id, name: d.name, base: d.base, price: d.base, prev: d.base })),
       log: ['游戏开始！'],
@@ -694,6 +697,12 @@ export class GameRoom {
         this.addLog(ending.name + ' 存款利息 +¥' + interest);
       }
     }
+    // 贷款利息滚入本金
+    if (ending && !ending.bankrupt && (ending.loan || 0) > 0) {
+      const loanInterest = Math.max(1, Math.round(ending.loan * (this.state.loanRate || 0)));
+      ending.loan += loanInterest;
+      this.addLog(ending.name + ' 贷款利息 +¥' + loanInterest + '（余额 ¥' + ending.loan + '）');
+    }
     let guard = 0;
     do {
       this.state.current = (this.state.current + 1) % n;
@@ -1020,7 +1029,8 @@ export class GameRoom {
     this.scheduleAuctionEnd();
   }
 
-  _calcAssets(p) {
+  // 毛资产（不含贷款），贷款额度按它计算
+  _grossAssets(p) {
     let v = p.money || 0;
     for (const t of this.map.tiles) {
       if (this.state.tileOwners[t.id] === p.id) {
@@ -1030,6 +1040,59 @@ export class GameRoom {
     }
     v += this.stockValue(p);
     return v;
+  }
+
+  // 净资产 = 毛资产 − 贷款余额
+  _calcAssets(p) {
+    return this._grossAssets(p) - (p.loan || 0);
+  }
+
+  // 贷款额度：按【净资产】的 30% 计算（上限 ¥2500，按百元取整）
+  // 用净资产而不是毛资产，否则借钱→现金变多→额度跟着涨，可以无限套娃
+  loanCap(player) {
+    if (!this.state) return 0;
+    const net = this._calcAssets(player);
+    const raw = Math.floor((Math.max(0, net) * LOAN_ASSET_RATIO) / 100) * 100;
+    return Math.max(0, Math.min(raw, LOAN_MAX));
+  }
+
+  _loanGuard(playerId) {
+    if (!this.state) return { error: '游戏未开始' };
+    const cur = this.state.players[this.state.current];
+    if (!cur || cur.id !== playerId) return { error: '还没轮到你' };
+    if (!['rolling', 'buying', 'after_move'].includes(this.state.phase)) return { error: '只能在自己回合操作贷款' };
+    return { cur };
+  }
+
+  takeLoan(playerId, amount) {
+    const g = this._loanGuard(playerId);
+    if (g.error) return g;
+    const cur = g.cur;
+    const n = Math.floor(Number(amount) || 0);
+    if (n < LOAN_MIN) return { error: '单次贷款至少 ¥' + LOAN_MIN };
+    const cap = this.loanCap(cur);
+    if ((cur.loan || 0) + n > cap) return { error: '超出贷款额度（可借 ¥' + Math.max(0, cap - (cur.loan || 0)) + '）' };
+    cur.loan = (cur.loan || 0) + n;
+    cur.money += n;
+    this.addLog(cur.name + ' 向银行贷款 ¥' + n + '（余额 ¥' + cur.loan + '，每回合利息 ' + Math.round(this.state.loanRate * 100) + '%）');
+    this.broadcastState();
+    return { ok: true };
+  }
+
+  repayLoan(playerId, amount) {
+    const g = this._loanGuard(playerId);
+    if (g.error) return g;
+    const cur = g.cur;
+    const owed = cur.loan || 0;
+    if (owed <= 0) return { error: '你没有未还贷款' };
+    const n = Math.min(Math.floor(Number(amount) || 0), owed);
+    if (n < 1) return { error: '还款金额不正确' };
+    if (cur.money < n) return { error: '现金不足，无法还款 ¥' + n };
+    cur.loan = owed - n;
+    cur.money -= n;
+    this.addLog(cur.name + ' 还款 ¥' + n + (cur.loan > 0 ? '（剩余 ¥' + cur.loan + '）' : '，贷款已结清'));
+    this.broadcastState();
+    return { ok: true };
   }
 
   // 持股总市值
@@ -1125,6 +1188,10 @@ export class GameRoom {
   }
 
   broadcastState() {
+    // loanCap 随资产变化，这里按最新资产算好一起发（前端只负责展示）
+    if (this.state && this.state.players) {
+      this.state.players.forEach((p) => { p.loanCap = this.loanCap(p); });
+    }
     this.broadcast(JSON.stringify({ type: 'game_state', state: this.state }));
   }
 

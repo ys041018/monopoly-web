@@ -132,9 +132,9 @@ const roomSettings = $('room-settings'), setMoney = $('set-money'), setRounds = 
 const setFast = $('set-fast'), setTeam = $('set-team'), setInterest = $('set-interest');
 const soundToggle = $('sound-toggle'), copyRoomBtn = $('copy-room-btn');
 const rollBtn = $('roll-btn'), buyBtn = $('buy-btn'), skipBuyBtn = $('skip-buy-btn'), endTurnBtn = $('end-turn-btn');
-const buildBtn = $('build-btn'), mortgageBtn = $('mortgage-btn'), tradeBtn = $('trade-btn'), stockBtn = $('stock-btn');
+const buildBtn = $('build-btn'), mortgageBtn = $('mortgage-btn'), tradeBtn = $('trade-btn'), stockBtn = $('stock-btn'), loanBtn = $('loan-btn');
 const bailBtn = $('bail-btn'), jailcardBtn = $('jailcard-btn');
-const buildPanel = $('build-panel'), mortgagePanel = $('mortgage-panel'), tradePanel = $('trade-panel'), tradeOffer = $('trade-offer'), auctionPanel = $('auction-panel'), stockPanel = $('stock-panel');
+const buildPanel = $('build-panel'), mortgagePanel = $('mortgage-panel'), tradePanel = $('trade-panel'), tradeOffer = $('trade-offer'), auctionPanel = $('auction-panel'), stockPanel = $('stock-panel'), loanPanel = $('loan-panel');
 const waitingTip = $('waiting-tip'), diceDisplay = $('dice-display');
 const lobbyMsg = $('lobby-msg'), playerList = $('player-list'), playerCount = $('player-count');
 const gamePlayerList = $('game-player-list'), gamePlayerCount = $('game-player-count');
@@ -210,7 +210,16 @@ endTurnBtn.addEventListener('click', () => ws.send(JSON.stringify({ type: 'end_t
 buildBtn.addEventListener('click', () => { toggle(buildPanel); if (!buildPanel.classList.contains('hidden')) renderBuildPanel(); });
 mortgageBtn.addEventListener('click', () => { toggle(mortgagePanel); if (!mortgagePanel.classList.contains('hidden')) renderMortgagePanel(); });
 tradeBtn.addEventListener('click', () => { toggle(tradePanel); if (!tradePanel.classList.contains('hidden')) renderTradePanel(); });
-stockBtn.addEventListener('click', () => { toggle(stockPanel); if (!stockPanel.classList.contains('hidden')) renderStockPanel(); });
+stockBtn.addEventListener('click', () => {
+  if (loanPanel) loanPanel.classList.add('hidden');
+  toggle(stockPanel);
+  if (!stockPanel.classList.contains('hidden')) renderStockPanel();
+});
+if (loanBtn) loanBtn.addEventListener('click', () => {
+  if (stockPanel) stockPanel.classList.add('hidden');
+  toggle(loanPanel);
+  if (!loanPanel.classList.contains('hidden')) renderLoanPanel();
+});
 
 authLoginBtn.addEventListener('click', () => {
   if (!authUser.value.trim() || !authPass.value) { authMsg.textContent = '请输入用户名和密码'; authMsg.className = 'msg error'; return; }
@@ -407,6 +416,7 @@ function refresh() {
   updateActions();
   renderTradeOffer();
   renderStockPanel();
+  renderLoanPanel();
   detectSound();
   detectCard();
 }
@@ -437,7 +447,11 @@ function updateActions() {
   if (state.phase === 'auction') { renderAuctionPanel(); return; }
   const myTurn = !isSpectator && state.players[state.current].id === myId;
   // 交易 / 股市不受回合限制：非旁观者随时可打开（面板内自行判断是否轮到我）
-  if (!isSpectator) { tradeBtn.classList.remove('hidden'); stockBtn.classList.remove('hidden'); }
+  if (!isSpectator) {
+    tradeBtn.classList.remove('hidden');
+    stockBtn.classList.remove('hidden');
+    if (loanBtn) loanBtn.classList.remove('hidden');
+  }
   if (!myTurn) { waitingTip.classList.remove('hidden'); return; }
 
   if (state.phase === 'rolling') {
@@ -874,6 +888,53 @@ function showBubble(msg) {
     grid.appendChild(b);
   });
 })();
+
+// ---------- 贷款面板 ----------
+function renderLoanPanel() {
+  if (!loanPanel || loanPanel.classList.contains('hidden')) return;
+  loanPanel.innerHTML = '';
+  if (!state || !state.players) { tip(loanPanel, '开局后才能贷款'); return; }
+  if (isSpectator) { tip(loanPanel, '旁观模式不能操作'); return; }
+  const me = state.players.find(p => p.id === myId);
+  if (!me) { tip(loanPanel, '找不到你的玩家数据'); return; }
+  const cur = state.players[state.current];
+  const myTurn = !!(cur && cur.id === myId);
+  const rate = Math.round((state.loanRate || 0) * 100);
+
+  const cap = typeof me.loanCap === 'number' ? me.loanCap : null;
+  const info = document.createElement('div');
+  info.className = 'stock-summary';
+  info.textContent = cap == null
+    ? '已借 ¥' + (me.loan || 0)
+    : '额度 ¥' + cap + ' · 已借 ¥' + (me.loan || 0) + ' · 可借 ¥' + Math.max(0, cap - (me.loan || 0));
+  loanPanel.appendChild(info);
+
+  const rateLine = document.createElement('div');
+  rateLine.className = 'trade-bal';
+  rateLine.textContent = '每回合利息 ' + rate + '%（滚动计入本金）· 贷款会让总资产变负';
+  loanPanel.appendChild(rateLine);
+
+  const remain = cap == null ? 0 : Math.max(0, cap - (me.loan || 0));
+  const actions = [
+    { label: '借 500', amount: 500, fn: () => ws.send(JSON.stringify({ type: 'take_loan', amount: 500 })), disable: remain < 500 },
+    { label: '借 1000', amount: 1000, fn: () => ws.send(JSON.stringify({ type: 'take_loan', amount: 1000 })), disable: remain < 1000 },
+    { label: '借满 ' + remain, amount: remain, fn: () => ws.send(JSON.stringify({ type: 'take_loan', amount: remain })), disable: remain < 100 },
+    { label: '还 500', fn: () => ws.send(JSON.stringify({ type: 'repay_loan', amount: 500 })), disable: (me.loan || 0) < 1 },
+    { label: '还清 ' + (me.loan || 0), fn: () => ws.send(JSON.stringify({ type: 'repay_loan', amount: me.loan || 0 })), disable: (me.loan || 0) < 1 },
+  ];
+  actions.forEach((a) => {
+    const b = mkBtn(a.label, a.label.startsWith('借') ? 'primary' : 'ghost');
+    b.disabled = !myTurn || a.disable;
+    b.addEventListener('click', a.fn);
+    loanPanel.appendChild(b);
+  });
+  if (!myTurn) {
+    const hint = document.createElement('div');
+    hint.className = 'waiting-tip';
+    hint.textContent = '只能在自己回合借贷';
+    loanPanel.appendChild(hint);
+  }
+}
 
 // ---------- 工具 ----------
 function mkRow(name, status) {

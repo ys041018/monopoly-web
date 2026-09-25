@@ -402,6 +402,16 @@ wss.on('connection', (ws) => {
         if (r.error) room.sendError(ws, r.error);
         break;
       }
+      case 'take_loan': {
+        const r = room.takeLoan(playerId, msg.amount);
+        if (r.error) room.sendError(ws, r.error);
+        break;
+      }
+      case 'repay_loan': {
+        const r = room.repayLoan(playerId, msg.amount);
+        if (r.error) room.sendError(ws, r.error);
+        break;
+      }
       case 'sell_stock': {
         const r = room.sellStock(playerId, msg.stockId, msg.shares);
         if (r.error) room.sendError(ws, r.error);
