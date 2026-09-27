@@ -351,7 +351,7 @@ wss.on('connection', (ws, req) => {
       let joinUserId = null;
       if (token) { const u = await findSession(String(token)); if (u) joinUserId = u.id; }
       const target = getRoom(codeRaw);
-      if (!target) { sendError('房间不存在，请检查房间码'); return false; }
+      if (!target) { sendError('房间不存在（房主可能还没建好，或服务重启后房间已失效），请核对房间码'); return false; }
       room = target;
       roomCode = String(codeRaw || '').trim().toUpperCase();
       const result = room.addPlayer(ws, cleanNickname(name), savedPlayerId, joinUserId);
@@ -372,7 +372,22 @@ wss.on('connection', (ws, req) => {
     };
 
     if (msg.type === 'join') {
-      if (playerId) return;
+      const targetCode = String(msg.roomCode || '').trim().toUpperCase();
+      if (playerId) {
+        // 已经在目标房间：幂等，直接忽略（避免重复 join 把自己踢出去重进）
+        if (targetCode && targetCode === roomCode) return;
+        // 想换房间：先离开当前房间，否则会被静默忽略（以前就是这个 bug）
+        if (room) {
+          if (isSpectator) room.removeSpectator(playerId);
+          else room.removePlayer(playerId);
+          if (room.players.size === 0 && !room.started && roomCode) rooms.delete(roomCode);
+        }
+        console.log('[换房] 离开 ' + (roomCode || '(无)') + ' → 加入 ' + targetCode);
+        playerId = null;
+        isSpectator = false;
+        room = null;
+        roomCode = null;
+      }
       await joinRoom(msg.roomCode, msg.name, msg.playerId, msg.token);
       return;
     }

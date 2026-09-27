@@ -159,6 +159,7 @@ const addAiBtn = $('add-ai-btn');
 const hotkeyBtn = $('hotkey-btn'), hotkeyPanel = $('hotkey-panel');
 const authScreen = $('auth-screen'), authPanel = $('auth-panel'), authInfo = $('auth-info'), authUser = $('auth-user'), authPass = $('auth-pass'), authNick = $('auth-nick'), authMsg = $('auth-msg'), authName = $('auth-name');
 const authLoginBtn = $('auth-login-btn'), authRegisterBtn = $('auth-register-btn'), authLogoutBtn = $('auth-logout-btn'), authStats = $('auth-stats');
+const guestBtn = $('guest-btn');
 const createRoomBtn = $('create-room-btn');
 const quickMatchBtn = $('quick-match-btn'), roomsBtn = $('rooms-btn');
 const roomsModal = $('rooms-modal'), roomsList = $('rooms-list'), roomsClose = $('rooms-close');
@@ -443,6 +444,13 @@ authRegisterBtn.addEventListener('click', () => {
   authMsg.textContent = '注册中...'; authMsg.className = 'msg';
   ws.send(JSON.stringify({ type: 'register', username: authUser.value.trim(), password: authPass.value, nickname: authNick.value.trim() || authUser.value.trim() }));
 });
+// 游客进入：不用注册也能开局（本局不计入战绩）
+if (guestBtn) guestBtn.addEventListener('click', () => {
+  if (!nameInput.value.trim()) nameInput.value = '游客' + Math.floor(1000 + Math.random() * 9000);
+  authScreen.classList.add('hidden');
+  lobby.classList.remove('hidden');
+  setMsg('以游客身份进入（本局不计入战绩，登录后可记录）');
+});
 authLogoutBtn.addEventListener('click', () => {
   if (authToken) ws.send(JSON.stringify({ type: 'logout', token: authToken }));
   // 主动离开房间，否则下次登录/刷新会被自动拉回旧房间（含机器人）
@@ -509,6 +517,7 @@ ws.onmessage = (e) => {
   try { msg = JSON.parse(e.data); } catch { return; }
   switch (msg.type) {
     case 'welcome':
+      joinBtn.disabled = false;      // 加入成功要恢复按钮，否则换房间时点不动
       myId = msg.playerId;
       // 记住房间码：快速匹配进已有房间、或刷新后自动重连都要用它
       if (msg.roomCode) {
@@ -663,6 +672,7 @@ function refresh() {
 
 function backToLobby() {
   state = null; isSpectator = false; entered = false; animating = false;
+  joinBtn.disabled = false;
   document.body.removeAttribute('data-map');   // 回大厅恢复默认背景
   const chatBox = document.getElementById('chat-box');
   if (chatBox) chatBox.classList.add('hidden');

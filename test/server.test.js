@@ -400,6 +400,45 @@ test('前端错误上报：写进服务端日志且有速率限制', async () =>
   c.close();
 });
 
+test('加入房间：已是同一房间时幂等；换房间会自动离开旧房', async () => {
+  // 建房 A
+  const a = await connect();
+  a.send({ type: 'create_room' });
+  const codeA = (await a.wait('room_created')).roomCode;
+  a.send({ type: 'join', name: '甲', roomCode: codeA });
+  const welcomeA = await a.wait('welcome');
+
+  // 重复 join 同一房间：幂等，不应产生新玩家
+  a.send({ type: 'join', name: '甲', roomCode: codeA });
+  await sleep(200);
+  const listA = a.seen().filter(m => m.type === 'player_list').pop();
+  assert.equal(listA.players.length, 1, '重复加入同一房间不应多出玩家');
+
+  // 另建房间 B，同一个连接直接加入 B（以前会被静默忽略）
+  const b = await connect();
+  b.send({ type: 'create_room' });
+  const codeB = (await b.wait('room_created')).roomCode;
+  b.send({ type: 'join', name: '乙', roomCode: codeB });
+  await b.wait('welcome');
+
+  a.send({ type: 'join', name: '甲', roomCode: codeB });
+  const welcomeB = await a.wait('welcome');
+  assert.equal(welcomeB.roomCode, codeB, '应加入新房间');
+  assert.notEqual(welcomeB.playerId, welcomeA.playerId, '换房后是新玩家身份');
+
+  const listB = a.seen().filter(m => m.type === 'player_list').pop();
+  assert.ok(listB.players.some(p2 => p2.name === '甲'), 'B 房应出现该玩家');
+
+  // 原房间 A 已空 → 房间被回收
+  const probe = await connect();
+  probe.send({ type: 'list_rooms' });
+  const rooms = (await probe.wait('room_list')).rooms.map(r => r.code);
+  assert.ok(!rooms.includes(codeA), 'A 房应已被回收');
+  assert.ok(rooms.includes(codeB), 'B 房仍在');
+
+  a.close(); b.close(); probe.close();
+});
+
 test('WebSocket：房间不存在时返回友好错误', async () => {
   const c = await connect();
   c.send({ type: 'join', name: '路人', roomCode: 'ZZZZZZ' });
