@@ -1,8 +1,9 @@
 // ============================================================
 // Service Worker：应用外壳缓存（离线打开 + 秒开）
-// 策略：assets/css 缓存优先；HTML/JS 网络优先（保证更新及时），离线时回落到缓存
+// 策略：assets/css 先缓存后后台更新（stale-while-revalidate）；HTML/JS 网络优先；均离线回落缓存
+// 注意：改动静态资源后务必递增 CACHE 版本号，否则老客户端可能继续命中旧缓存
 // ============================================================
-const CACHE = 'monopoly-shell-v1';
+const CACHE = 'monopoly-shell-v2';
 const SHELL = [
   '/',
   '/index.html',
@@ -24,6 +25,11 @@ self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
 
+// 页面发现新版本时让它立刻接管
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
@@ -39,12 +45,18 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== self.location.origin) return;
   if (url.pathname === '/healthz') return;                    // 健康检查不进缓存
   if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/css/')) {
-    // 静态资源：缓存优先（服务端已设一年 immutable）
-    e.respondWith(caches.match(req).then((hit) => hit || fetch(req).then((res) => {
-      const copy = res.clone();
-      caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-      return res;
-    })));
+    // 静态资源：先给缓存保证秒开，同时后台拉新版本写回缓存（stale-while-revalidate）
+    // 这样部署后第二次刷新就能拿到新样式，不会像纯缓存优先那样长期卡在旧版本
+    e.respondWith(caches.match(req).then((hit) => {
+      const refresh = fetch(req).then((res) => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+        }
+        return res;
+      }).catch(() => hit);
+      return hit || refresh;
+    }));
     return;
   }
   // 其它（HTML/JS）：网络优先，失败回落缓存

@@ -146,9 +146,28 @@ setInterval(() => {
 conn.connect();
 
 // PWA：注册 Service Worker（仅 https / localhost 生效）
+// 发现新版本就立即接管并刷新一次，避免部署后仍停留在旧缓存
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('SW 注册失败', e.message));
+    navigator.serviceWorker.register('/sw.js').then((reg) => {
+      reg.update().catch(() => {});
+      reg.addEventListener('updatefound', () => {
+        const next = reg.installing;
+        if (!next) return;
+        next.addEventListener('statechange', () => {
+          if (next.state === 'installed' && navigator.serviceWorker.controller) {
+            next.postMessage({ type: 'SKIP_WAITING' });
+          }
+        });
+      });
+    }).catch((e) => console.warn('SW 注册失败', e.message));
+
+    let refreshed = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (refreshed) return;
+      refreshed = true;
+      window.location.reload();
+    });
   });
 }
 
