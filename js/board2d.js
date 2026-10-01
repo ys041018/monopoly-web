@@ -168,6 +168,8 @@ export function render(state) {
   holder.style.background = boardTheme.boardBg;
   if (!canvas) {
     canvas = document.createElement('canvas');
+    canvas.setAttribute('role', 'img');
+    canvas.setAttribute('aria-label', '大富翁棋盘，点击任意格子查看地契');
     holder.appendChild(canvas);
     bindTileClick();
   }

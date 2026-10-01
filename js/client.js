@@ -245,6 +245,7 @@ if (quickMatchBtn) quickMatchBtn.addEventListener('click', () => {
 });
 if (roomsBtn) roomsBtn.addEventListener('click', () => {
   roomsModal.classList.remove('hidden');
+  focusModal(roomsModal);
   roomsList.innerHTML = '';
   ws.send(JSON.stringify({ type: 'list_rooms' }));
   if (!roomsTimer) roomsTimer = setInterval(() => ws.send(JSON.stringify({ type: 'list_rooms' })), 5000);
@@ -263,6 +264,7 @@ function closeRoomsModal() {
 if (settingsBtn) settingsBtn.addEventListener('click', () => {
   roomSettings.classList.remove('hidden');
   renderRoomSettings();
+  focusModal(roomSettings);
 });
 if (settingsClose) settingsClose.addEventListener('click', () => roomSettings.classList.add('hidden'));
 if (roomSettings) roomSettings.addEventListener('click', (e) => { if (e.target === roomSettings) roomSettings.classList.add('hidden'); });
@@ -271,13 +273,15 @@ if (roomSettings) roomSettings.addEventListener('click', (e) => { if (e.target =
 if (profileBtn) profileBtn.addEventListener('click', () => {
   if (profileTitle) profileTitle.textContent = '📊 个人主页';
   profileModal.classList.remove('hidden');
-  profileBody.textContent = '加载中…';
+  focusModal(profileModal);
+  renderSkeleton(profileBody, 4);
   ws.send(JSON.stringify({ type: 'get_profile', token: authToken || undefined }));
 });
 if (leaderboardBtn) leaderboardBtn.addEventListener('click', () => {
   if (profileTitle) profileTitle.textContent = '🏆 排行榜';
   profileModal.classList.remove('hidden');
-  profileBody.textContent = '加载中…';
+  focusModal(profileModal);
+  renderSkeleton(profileBody, 6);
   ws.send(JSON.stringify({ type: 'get_leaderboard', limit: 20 }));
 });
 if (profileClose) profileClose.addEventListener('click', () => profileModal.classList.add('hidden'));
@@ -292,6 +296,20 @@ function rankRow(entry, myNickname) {
   val.textContent = entry.wins + ' 胜 · ' + (entry.games || 0) + ' 场 · 最高 ¥' + entry.maxAssets;
   row.appendChild(no); row.appendChild(nick); row.appendChild(val);
   return row;
+}
+
+// 拉数据时的骨架屏
+function renderSkeleton(container, rows) {
+  if (!container) return;
+  container.innerHTML = '';
+  const box = document.createElement('div');
+  box.className = 'rank-list';
+  for (let i = 0; i < rows; i++) {
+    const sk = document.createElement('div');
+    sk.className = 'skeleton';
+    box.appendChild(sk);
+  }
+  container.appendChild(box);
 }
 
 function renderLeaderboardInto(container, rows, myNickname) {
@@ -409,6 +427,7 @@ function openDrawer(kind) {
   if (drawerTitle) drawerTitle.textContent = d.title;
   actionModal.classList.remove('hidden');
   d.render();
+  focusModal(actionModal);
 }
 
 function closeDrawer() {
@@ -1284,6 +1303,27 @@ function sumChecked(box) {
   return sum;
 }
 
+// ---------- 无障碍与动效偏好 ----------
+const prefersReducedMotion = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+['rules-modal', 'profile-modal', 'action-modal', 'auction-modal', 'deed-modal', 'rooms-modal', 'room-settings']
+  .forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+  });
+
+// 用户主动打开的弹窗才抢焦点（拍卖弹窗是自动弹出，不打断操作）
+function focusModal(modal) {
+  if (!modal) return;
+  const target = modal.querySelector('button:not(:disabled), input, select, [tabindex]');
+  if (target) setTimeout(() => { try { target.focus({ preventScroll: true }); } catch {} }, 30);
+}
+
+const soundToggleEl = document.getElementById('sound-toggle');
+if (soundToggleEl) soundToggleEl.setAttribute('aria-label', '音效开关');
+
 // ---------- 规则说明 ----------
 const RULE_SECTIONS = [
   { title: '🎯 基本流程', items: [
@@ -1395,6 +1435,7 @@ function openRules() {
   if (!rulesModal) return;
   renderRules();
   rulesModal.classList.remove('hidden');
+  focusModal(rulesModal);
 }
 function closeRules() { if (rulesModal) rulesModal.classList.add('hidden'); }
 
@@ -1417,6 +1458,7 @@ let juicePrev = { bankrupt: new Set(), myMoney: null, phase: null, auction: null
 let juiceReady = false;                 // 第一帧只做基线，避免重连时炸一堆特效
 
 function juiceBurst(emoji) {
+  if (prefersReducedMotion()) return;
   const el = document.createElement('div');
   el.className = 'juice-burst';
   el.textContent = emoji;
@@ -1427,6 +1469,7 @@ function juiceBurst(emoji) {
 }
 
 function juiceCoins(amount) {
+  if (prefersReducedMotion()) return;
   const layer = document.getElementById('bubble-layer') || document.body;
   const n = Math.min(9, Math.max(3, Math.round(amount / 200)));
   for (let i = 0; i < n; i++) {
@@ -1450,6 +1493,7 @@ function juiceBoardFlash() {
 }
 
 function juiceBanner(title, sub) {
+  if (prefersReducedMotion()) return;
   const el = document.createElement('div');
   el.className = 'juice-banner';
   const a = document.createElement('div'); a.className = 'jb-title'; a.textContent = title;
