@@ -95,7 +95,7 @@ const ws = conn;
 let lastServerMsgAt = Date.now();
 
 // 顶部断线提示条
-function setConnStatus(text) {
+function setConnStatus(text, clickable) {
   let el = document.getElementById('conn-banner');
   if (!text) { if (el) el.classList.add('hidden'); return; }
   if (!el) {
@@ -103,7 +103,20 @@ function setConnStatus(text) {
     el.id = 'conn-banner';
     el.className = 'conn-banner';
     document.body.appendChild(el);
+    // 点横幅 = 立刻重连并收回座位
+    el.addEventListener('click', () => {
+      if (!el.classList.contains('conn-banner-action')) return;
+      try { if (ws.socket) ws.socket.close(); } catch {}
+      // 用户主动点 = 立即重连，跳过退避等待
+      ws.retry = 0;
+      if (ws.retryTimer) { clearTimeout(ws.retryTimer); ws.retryTimer = null; }
+      ws.connect();
+    });
   }
+  // 离线托管提示可以点：点一下立刻重连并收回座位
+  el.classList.toggle('conn-banner-action', !!clickable);
+  el.style.pointerEvents = clickable ? 'auto' : 'none';
+  el.style.cursor = clickable ? 'pointer' : 'default';
   el.textContent = text;
   el.classList.remove('hidden');
 }
@@ -1473,7 +1486,7 @@ if (!localStorage.getItem('monopoly_rules_seen')) {
 }
 
 // ---------- 演出效果（爽感） ----------
-let juicePrev = { bankrupt: new Set(), myMoney: null, phase: null, auction: null, groups: new Set() };
+let juicePrev = { bankrupt: new Set(), myMoney: null, phase: null, auction: null, groups: new Set(), takeover: new Set() };
 let juiceReady = false;                 // 第一帧只做基线，避免重连时炸一堆特效
 
 function juiceBurst(emoji) {
@@ -1509,6 +1522,20 @@ function juiceBoardFlash() {
   el.className = 'juice-flash';
   board.appendChild(el);
   setTimeout(() => el.remove(), 950);
+}
+
+// 托管状态变化：播报一次，让其他人知道谁掉线了
+function juiceTakeover() {
+  if (!state || !state.players) return;
+  const now = new Set(state.players.filter(p => p.computer && p.id !== myId).map(p => p.id));
+  if (!juiceReady) { juicePrev.takeover = now; return; }
+  const prev = juicePrev.takeover || new Set();
+  now.forEach((id) => {
+    if (prev.has(id)) return;
+    const sp = state.players.find(p => p.id === id);
+    if (sp) juiceBanner('🤖 ' + sp.name, '掉线，已由 AI 接管');
+  });
+  juicePrev.takeover = now;
 }
 
 function juiceBanner(title, sub) {
@@ -1606,6 +1633,30 @@ function juiceTurnTimer() {
   if (!urgent) juicePrev.lastTick = null;
 }
 
+// ---------- 离线续玩：倒计时与托管横幅 ----------
+function paintOfflineBadges() {
+  const list = state && state.players ? state.players : [];
+  document.querySelectorAll('[data-offline-for]').forEach((el) => {
+    const id = el.getAttribute('data-offline-for');
+    const sp = list.find(x => x.id === id);
+    const left = sp && sp.offlineUntil ? Math.max(0, Math.ceil((sp.offlineUntil - Date.now()) / 1000)) : 0;
+    const box = el.querySelector('.offline-sec');
+    if (box) box.textContent = String(left);
+    el.classList.toggle('taking-over', left <= 10);
+  });
+  // 掉线时本人也要看到倒计时：即使还没收到 game_state 更新，也按 player_list 的 offlineUntil 算
+  if (!state) return;
+  const me = list.find(x => x.id === myId);
+  if (me && me.offlineUntil && me.offline && !me.computer) {
+    const left = Math.max(0, Math.ceil((me.offlineUntil - Date.now()) / 1000));
+    setConnStatus('⚠️ 连接中断，剩 ' + left + ' 秒将交给 AI 托管（回来后点这里收回）', true);
+  } else if (me && me.computer) {
+    setConnStatus('🤖 已由 AI 托管，回来即可接管（点这里重连）', true);
+  } else {
+    setConnStatus('');
+  }
+}
+
 // ---------- 工具 ----------
 function mkRow(name, status) {
   const row = document.createElement('div');
@@ -1663,7 +1714,9 @@ function renderPlayers() {
   addAiBtn.classList.toggle('hidden', !myIsHost);
   players.forEach((p) => {
     const li = document.createElement('li');
-    li.innerHTML = `<span class="dot" style="background:${p.color}"></span><span class="p-name">${escapeHtml(p.name)}</span>${p.isHost ? '<span class="tag">房主</span>' : ''}${p.isAI ? '<span class="tag">机器人</span>' : ''}${p.id === myId ? '<span class="tag me">我</span>' : ''}`;
+    const offlineTag = p.computer ? '<span class="tag offline">托管中</span>'
+      : (p.offline ? '<span class="tag offline" data-offline-for="' + p.id + '">离线 <b class="offline-sec">60</b>s</span>' : '');
+    li.innerHTML = `<span class="dot" style="background:${p.color}"></span><span class="p-name">${escapeHtml(p.name)}</span>${p.isHost ? '<span class="tag">房主</span>' : ''}${p.isAI ? '<span class="tag">机器人</span>' : ''}${offlineTag}${p.id === myId ? '<span class="tag me">我</span>' : ''}`;
     // 房主操作：转让房主 / 踢出房间（仅大厅、仅对其他人）
     if (myIsHost && p.id !== myId) {
       const pass = document.createElement('button');
@@ -1692,7 +1745,9 @@ function renderPlayers() {
     const idn = sp && getIdentity(sp.identity);
     // 侧栏窄，列表里只显示图标（悬停看效果），完整描述显示在回合卡里
     const idnHtml = idn ? '<span class="tag identity" title="' + idn.name + '：' + idn.desc + '">' + idn.icon + '</span>' : '';
-    li2.innerHTML = `${numHtml}<span class="dot" style="background:${p.color}"></span><span class="p-name">${escapeHtml(p.name)}</span>${idnHtml}${sp && sp.team ? '<span class="tag">' + sp.team + ' 队</span>' : ''}${sp && sp.bankrupt ? '<span class="tag">破产</span>' : ''}${isCur ? '<span class="tag turn">回合中</span>' : ''}<span class="p-money">¥${sp ? sp.money : 1500}</span>`;
+    const offTag = p.computer ? '<span class="tag offline">🤖 托管</span>'
+      : (p.offline ? '<span class="tag offline" data-offline-for="' + p.id + '">离线 <b class="offline-sec">60</b>s</span>' : '');
+    li2.innerHTML = `${numHtml}<span class="dot" style="background:${p.color}"></span><span class="p-name">${escapeHtml(p.name)}</span>${idnHtml}${offTag}${sp && sp.team ? '<span class="tag">' + sp.team + ' 队</span>' : ''}${sp && sp.bankrupt ? '<span class="tag">破产</span>' : ''}${isCur ? '<span class="tag turn">回合中</span>' : ''}<span class="p-money">¥${sp ? sp.money : 1500}</span>`;
     gamePlayerList.appendChild(li2);
   });
 }
@@ -1801,7 +1856,7 @@ function updateTurnTimer() {
     turnSub.textContent = base;
   }
 }
-function tickTimer() { updateTurnTimer(); juiceTurnTimer(); }
+function tickTimer() { updateTurnTimer(); juiceTurnTimer(); paintOfflineBadges(); juiceTakeover(); }
 setInterval(tickTimer, 500);
 
 function renderDice() {

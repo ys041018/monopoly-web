@@ -73,6 +73,7 @@ before(async () => {
       WS_HEARTBEAT_MS: '300',        // 心跳加速，便于测试
       ROOM_GC_MS: '300',             // 房间回收加速
       AUTH_RATE_LIMIT: '3',          // 限流阈值调低，便于测试
+      AI_TAKEOVER_MS: '700',         // 离线托管加速，便于测试
     }),
     stdio: ['ignore', 'ignore', 'pipe'],
   });
@@ -445,4 +446,47 @@ test('WebSocket：房间不存在时返回友好错误', async () => {
   const err = await c.wait('error');
   assert.match(err.message, /房间不存在/);
   c.close();
+});
+
+test('离线续玩：掉线保留座位 → AI 托管 → 重连收回', async () => {
+  const a = await connect();
+  a.send({ type: 'create_room' });
+  const code = (await a.wait('room_created')).roomCode;
+  a.send({ type: 'join', name: '甲', roomCode: code });
+  const welcome = await a.wait('welcome');
+
+  const b = await connect();
+  b.send({ type: 'join', name: '乙', roomCode: code });
+  await b.wait('welcome');
+
+  // 房主开局需要 2 人，直接开始
+  a.send({ type: 'start_game' });
+  await a.wait('game_state');
+
+  // 甲掉线
+  a.close();
+  await sleep(400);
+
+  const offlineList = b.seen().filter(m => m.type === 'player_list').pop();
+  const offlineP = offlineList.players.find(p => p.name === '甲');
+  assert.ok(offlineP, '甲仍在名单中');
+  assert.equal(offlineP.offline, true, '甲被标记离线');
+  assert.ok(offlineP.offlineUntil > Date.now(), '带托管倒计时');
+
+  // 等超过 AI_TAKEOVER_MS（测试里 700ms）
+  await sleep(800);
+  const takenList = b.seen().filter(m => m.type === 'player_list').pop();
+  const taken = takenList.players.find(p => p.name.includes('甲'));
+  assert.equal(taken.computer, true, '甲已被 AI 托管');
+
+  // 甲重连并收回座位
+  const a2 = await connect();
+  a2.send({ type: 'join', name: '甲', roomCode: code, playerId: welcome.playerId });
+  await a2.wait('welcome');
+  const backList = b.seen().filter(m => m.type === 'player_list').pop();
+  const back = backList.players.find(p => p.name.includes('甲'));
+  assert.equal(back.computer, false, '重连后托管解除');
+  assert.equal(back.offline, false, '重连后离线标记清除');
+
+  b.close(); a2.close();
 });

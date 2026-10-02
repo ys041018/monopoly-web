@@ -379,7 +379,7 @@ wss.on('connection', (ws, req) => {
         // 想换房间：先离开当前房间，否则会被静默忽略（以前就是这个 bug）
         if (room) {
           if (isSpectator) room.removeSpectator(playerId);
-          else room.removePlayer(playerId);
+          else room.dropPlayer(playerId);
           if (room.players.size === 0 && !room.started && roomCode) rooms.delete(roomCode);
         }
         console.log('[换房] 离开 ' + (roomCode || '(无)') + ' → 加入 ' + targetCode);
@@ -443,7 +443,7 @@ wss.on('connection', (ws, req) => {
     if (msg.type === 'leave_room') {
       if (room && playerId) {
         if (isSpectator) room.removeSpectator(playerId);
-        else room.removePlayer(playerId);
+        else room.dropPlayer(playerId);
         if (room.players.size === 0 && !room.started && roomCode) rooms.delete(roomCode);
       }
       playerId = null;
@@ -623,7 +623,7 @@ wss.on('connection', (ws, req) => {
   ws.on('close', () => {
     if (!playerId || !room) return;
     if (isSpectator) room.removeSpectator(playerId);
-    else room.removePlayer(playerId);
+    else room.removePlayer(playerId);   // 掉线：保留座位，60s 后 AI 托管
     if (room.players.size === 0 && !room.started && roomCode) rooms.delete(roomCode);
   });
   ws.on('error', () => {});
@@ -635,10 +635,14 @@ setInterval(() => {
   for (const [code, room] of rooms) {
     const idle = now - (room.lastActiveAt || now);
     const empty = room.players.size === 0;
-    if (empty || (!room.started && idle > 30 * 60 * 1000)) {
+    // 开局后全员掉线、长时间无人回来 → 回收，避免僵尸房间常驻内存
+    const away = room.abandonedAt || room.lastActiveAt || now;
+    const abandoned = room.started && now - away > 30 * 60 * 1000 && !room.hasActiveHuman();
+    if (empty || abandoned || (!room.started && idle > 30 * 60 * 1000)) {
       if (room._turnTimer) clearTimeout(room._turnTimer);
       if (room._aiTimer) clearTimeout(room._aiTimer);
       if (room._auctionTimer) clearTimeout(room._auctionTimer);
+      if (room._takeoverTimers) room._takeoverTimers.forEach((t) => clearTimeout(t));
       rooms.delete(code);
     }
   }

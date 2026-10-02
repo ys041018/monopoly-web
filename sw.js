@@ -3,7 +3,7 @@
 // 策略：assets/css 先缓存后后台更新（stale-while-revalidate）；HTML/JS 网络优先；均离线回落缓存
 // 注意：改动静态资源后务必递增 CACHE 版本号，否则老客户端可能继续命中旧缓存
 // ============================================================
-const CACHE = 'monopoly-shell-v2';
+const CACHE = 'monopoly-shell-v3';
 const SHELL = [
   '/',
   '/index.html',

@@ -450,7 +450,7 @@ test('大厅最后一个真人离开时，机器人与房间一起清空', (t) =
   room.addAI(host.id);
   room.addAI(host.id);
   assert.equal(room.players.size, 3);
-  room.removePlayer(host.id);
+  room.dropPlayer(host.id);
   assert.equal(room.players.size, 0, '机器人应被一起清理');
 });
 
@@ -460,6 +460,60 @@ test('大厅还有真人时不清机器人', (t) => {
   const b = room.addPlayer(fakeWs(), '乙', null, null);
   room.addAI(a.id);
   assert.equal(room.players.size, 3);
-  room.removePlayer(a.id);
+  room.dropPlayer(a.id);
   assert.equal(room.players.size, 2, '另一名真人还在，机器人与房间保留');
-});
+});
+
+// ---------- 离线续玩：掉线保留座位 -> AI 托管 -> 回来收回 ----------
+
+test('离线续玩：掉线后座位保留，标记离线与托管倒计时', (t) => {
+  const { room, hostId, S } = setup(t);
+  room.removePlayer(hostId);
+  assert.ok(room.players.has(hostId), '掉线不删座位');
+  const p = room.players.get(hostId);
+  assert.equal(p.offline, true, '标记离线');
+  assert.ok(p.offlineUntil > Date.now(), '设置托管倒计时');
+  const sp = S.players.find(x => x.id === hostId);
+  assert.equal(sp.offline, true, 'state 同步 offline');
+  assert.notEqual(S.phase, 'gameOver', '少一个真人但游戏继续');
+});
+
+test('离线续玩：宽限期后 AI 接管，资产与座位不变', (t) => {
+  const { room, hostId, S } = setup(t);
+  const sp = S.players.find(x => x.id === hostId);
+  const moneyBefore = sp.money;
+  const posBefore = sp.position;
+  room.removePlayer(hostId);
+  room._takeoverAI(hostId);
+  const p = room.players.get(hostId);
+  assert.equal(p.aiControlled, true, '标记 AI 托管');
+  assert.equal(sp.computer, true, 'state.computer = true');
+  assert.equal(sp.offlineUntil, null, '托管后清掉倒计时');
+  assert.equal(sp.money, moneyBefore, '资产不变');
+  assert.equal(sp.position, posBefore, '位置不变');
+  assert.ok(sp.name.includes('托管'), '名字标注托管');
+});
+
+test('离线续玩：重连收回控制权，托管标记清除', (t) => {
+  const { room, hostId, S } = setup(t);
+  room.removePlayer(hostId);
+  room._takeoverAI(hostId);
+  const r = room.addPlayer(fakeWs(), '房主', hostId, null);
+  assert.equal(r.id, hostId, '仍是同一个座位');
+  const p = room.players.get(hostId);
+  const sp = S.players.find(x => x.id === hostId);
+  assert.equal(p.aiControlled, false, '托管已解除');
+  assert.equal(p.offline, false, '离线标记已清');
+  assert.equal(sp.computer, false, 'state.computer 清空');
+  assert.equal(sp.offline, false, 'state.offline 清空');
+  assert.ok(p.ws, '连接已恢复');
+});
+
+test('离线续玩：托管玩家不占回合倒计时', (t) => {
+  const { room, hostId, S } = setup(t);
+  S.current = S.players.findIndex(p => p.id === hostId);
+  room.removePlayer(hostId);
+  room._takeoverAI(hostId);
+  room._resetTurnTimer();
+  assert.equal(S.turnDeadline, null, '托管玩家不设倒计时');
+});

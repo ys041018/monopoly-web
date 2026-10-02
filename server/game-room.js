@@ -19,6 +19,8 @@ const PLAYER_COLORS = ['#EF5350', '#FF9800', '#FDD835', '#66BB6A', '#4FC3F7', '#
 const TURN_TIMEOUT = 45000; // 回合倒计时（毫秒）
 // 全市场事件概率（可用环境变量覆盖，便于测试与调平衡）
 const EVENT_CHANCE = Number(process.env.MARKET_EVENT_CHANCE != null ? process.env.MARKET_EVENT_CHANCE : MARKET_EVENT_CHANCE);
+// 掉线多久后由 AI 接管（离线续玩）：默认 60s，可用环境变量覆盖便于测试
+const AI_TAKEOVER_MS = Number(process.env.AI_TAKEOVER_MS || 60000);
 
 function uid() { return Math.random().toString(36).slice(2, 10); }
 
@@ -30,6 +32,7 @@ export class GameRoom {
     this.state = null;
     this._auctionTimer = null;
     this._turnTimer = null;
+    this._takeoverTimers = new Map();   // playerId -> AI 托管定时器
     this.settings = {
       startMoney: START_MONEY, maxRounds: DEFAULT_MAX_ROUNDS, houseMultiplier: 1, mapId: 'standard',
       fastMode: false, teamMode: false, interestRate: DEFAULT_INTEREST_RATE,
@@ -69,8 +72,19 @@ export class GameRoom {
     if (playerId && this.players.has(playerId)) {
       const p = this.players.get(playerId);
       if (p._discTimer) { clearTimeout(p._discTimer); p._discTimer = null; }
+      const timer = this._takeoverTimers.get(playerId);
+      if (timer) { clearTimeout(timer); this._takeoverTimers.delete(playerId); }
       p.ws = ws;
+      p.aiControlled = false;
+      p.offline = false;
+      p.offlineUntil = null;
+      this.abandonedAt = null;   // 有人回来，取消放弃标记
+      const sp = this.state && this.state.players && this.state.players.find(x => x.id === playerId);
+      if (sp) { sp.computer = false; sp.offline = false; sp.offlineUntil = null; }
+      // 托管期间可能刚好轮到这位玩家，交还控制权后要恢复回合倒计时
+      this._resetTurnTimer();
       this.broadcastPlayerList();
+      if (this.state) this.broadcastState();
       return { id: playerId, player: { id: p.id, name: p.name, color: p.color, isHost: p.isHost } };
     }
     if (this.started) {
@@ -92,25 +106,89 @@ export class GameRoom {
     return { id, player: { id, name: cleanName, color, isHost: player.isHost } };
   }
 
+  // 连接断开：留在座位上，宽限期后交给 AI 托管，回来还能接着玩
   removePlayer(playerId) {
     const player = this.players.get(playerId);
     if (!player) return;
+    if (player._discTimer) { clearTimeout(player._discTimer); player._discTimer = null; }
+    const timer = this._takeoverTimers.get(playerId);
+    if (timer) { clearTimeout(timer); this._takeoverTimers.delete(playerId); }
     player.ws = null;
+
+    // 还没开局：直接释放座位
     if (!this.started || !this.state) { this._deletePlayer(playerId); return; }
-    if (player._discTimer) clearTimeout(player._discTimer);
-    player._discTimer = setTimeout(() => { player._discTimer = null; this._deletePlayer(playerId); }, 60000);
+
+    // AI 本来就没有连接，不重复处理
+    if (player.isAI) { this._deletePlayer(playerId); return; }
+
+    player.offline = true;
+    player.offlineUntil = Date.now() + AI_TAKEOVER_MS;
+    const sp = this.state.players.find(x => x.id === playerId);
+    if (sp) { sp.offline = true; sp.offlineUntil = player.offlineUntil; }
+
+    // 掉线者正好该行动：跳过他的倒计时，别冻住整桌
+    const cur = this.state.players[this.state.current];
+    if (cur && cur.id === playerId) this._resetTurnTimer();
+
+    // 全员掉线的房间：记一个时间戳，方便 GC 判断是否已经没人回来
+    if ([...this.players.values()].every(x => !x.ws || x.ws.readyState !== 1)) {
+      this.abandonedAt = this.abandonedAt || Date.now();
+    }
+
+    this._takeoverTimers.set(playerId, setTimeout(() => {
+      this._takeoverTimers.delete(playerId);
+      this._takeoverAI(playerId);
+    }, AI_TAKEOVER_MS));
+
     this.broadcastPlayerList();
+    this.broadcastState();
+  }
+
+  // AI 接管掉线玩家的座位：继续以原玩家的资产行动，回来可随时收回控制权
+  _takeoverAI(playerId) {
+    const player = this.players.get(playerId);
+    if (!player || player.ws || !this.state) return;
+    player.aiControlled = true;
+
+    const sp = this.state.players.find(x => x.id === playerId);
+    if (!sp) return;
+    sp.computer = true;
+    sp.offline = true;
+    sp.offlineUntil = null;
+
+    if (!player.name.endsWith('（托管）')) {
+      player.displaySuffix = '托管';
+      sp.name = player.name + '（托管）';
+      this.addLog(player.name + ' 掉线，已由 AI 托管');
+    }
+
+    this.broadcastPlayerList();
+    this.broadcastState();
+
+    // 如果正好轮到他，让 AI 立刻接手这一回合
+    const cur = this.state.players[this.state.current];
+    if (cur && cur.id === playerId && !sp.bankrupt && this.state.phase !== 'gameOver') {
+      this._scheduleAI(playerId);
+    }
+  }
+
+  // 主动退出（离开房间 / 被踢）：真正移除座位
+  dropPlayer(playerId) {
+    this._deletePlayer(playerId);
   }
 
   _deletePlayer(playerId) {
     const player = this.players.get(playerId);
     if (!player) return;
+    const tk = this._takeoverTimers.get(playerId);
+    if (tk) { clearTimeout(tk); this._takeoverTimers.delete(playerId); }
+    if (player._discTimer) { clearTimeout(player._discTimer); player._discTimer = null; }
     this.players.delete(playerId);
 
     if (this.started && this.state) {
       const sp = this.state.players.find(p => p.id === playerId);
       if (sp && !sp.bankrupt) { sp.bankrupt = true; this.addLog(sp.name + ' 掉线退出'); }
-      const online = [...this.players.values()].filter(p => p.isAI || (p.ws && p.ws.readyState === 1)).length;
+      const online = [...this.players.values()].filter(p => p.isAI || p.aiControlled || (p.ws && p.ws.readyState === 1)).length;
       if (online < MIN_PLAYERS) {
         console.log('[自动结束] 在线人数不足，游戏回到大厅');
         this.resetToLobby();
@@ -132,6 +210,11 @@ export class GameRoom {
   }
 
   removeSpectator(id) { this.spectators.delete(id); }
+
+  // 是否还有活跃连接（托管中的不算活跃，避免僵尸房间永久占用内存）
+  hasActiveHuman() {
+    return [...this.players.values()].some((p) => !p.isAI && !p.aiControlled && p.ws && p.ws.readyState === 1);
+  }
 
   // 房主踢人（仅大厅，可踢机器人）
   kickPlayer(hostId, targetId) {
@@ -189,6 +272,7 @@ export class GameRoom {
     let teamIdx = 0;
     const players = [...this.players.values()].map(p => ({
       id: p.id, name: p.name, color: p.color, isHost: p.isHost, isAI: !!p.isAI, userId: p.userId || null,
+      offline: !!p.offline, computer: !!p.aiControlled, offlineUntil: p.offlineUntil || null,
       position: 0, money: startMoney, inJail: false, jailedTurns: 0, outOfJailCards: 0, rest: false, bankrupt: false,
       team: this.settings.teamMode ? (teamIdx++ % 2 === 0 ? 'A' : 'B') : null,
       stocks: {},
@@ -967,7 +1051,7 @@ export class GameRoom {
       return;
     }
     const cur = this.state.players[this.state.current];
-    if (!cur || cur.bankrupt || cur.isAI) { this.state.turnDeadline = null; return; }
+    if (!cur || cur.bankrupt || cur.isAI || cur.computer) { this.state.turnDeadline = null; return; }
     const timeout = this.state.turnTimeout || TURN_TIMEOUT;
     this.state.turnDeadline = Date.now() + timeout;
     this._turnTimer = setTimeout(() => { this._turnTimer = null; this._onTurnTimeout(); }, timeout);
@@ -976,7 +1060,7 @@ export class GameRoom {
   _onTurnTimeout() {
     if (!this.state || this.state.phase === 'gameOver' || this.state.phase === 'auction') return;
     const cur = this.state.players[this.state.current];
-    if (!cur || cur.bankrupt || cur.isAI) return;
+    if (!cur || cur.bankrupt || cur.isAI || cur.computer) return;
     if (this.state.phase === 'rolling') this.rollDice(cur.id);
     else if (this.state.phase === 'buying') this.skipBuy(cur.id);
     else if (this.state.phase === 'after_move') this.endTurn(cur.id);
@@ -994,7 +1078,7 @@ export class GameRoom {
     if (!this.state || this.state.phase === 'gameOver') return;
     const ps = this.state.players;
     const cur = ps[this.state.current];
-    if (!cur || cur.id !== playerId || !cur.isAI || cur.bankrupt) return;
+    if (!cur || cur.id !== playerId || !(cur.isAI || cur.computer) || cur.bankrupt) return;
 
     if (this.state.phase === 'rolling') {
       if (cur.inJail) {
@@ -1006,7 +1090,7 @@ export class GameRoom {
       }
       // 掷骰后若仍轮到该 AI，继续下一步（购买 / 结束回合 / 再来一次）
       const n = this.state.players[this.state.current];
-      if (this.state.phase !== 'gameOver' && n && n.id === playerId && n.isAI && !n.bankrupt) {
+      if (this.state.phase !== 'gameOver' && n && n.id === playerId && (n.isAI || n.computer) && !n.bankrupt) {
         this._scheduleAI(playerId);
       }
     } else if (this.state.phase === 'buying') {
@@ -1430,6 +1514,7 @@ export class GameRoom {
   broadcastPlayerList() {
     const players = [...this.players.values()].map(p => ({
       id: p.id, name: p.name, color: p.color, isHost: p.isHost, isAI: !!p.isAI,
+      offline: !!p.offline, computer: !!p.aiControlled, offlineUntil: p.offlineUntil || null,
     }));
     this.broadcast(JSON.stringify({
       type: 'player_list', players,
